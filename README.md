@@ -10,17 +10,21 @@ A small, clean admin panel. Sign-in, roles and plugins work out of the box.
 
 ## Run it
 
-Needs Node.js 24 or newer.
+Needs [Node.js](https://nodejs.org) 24 or newer and Git.
 
 ```sh
+git clone https://github.com/gokhangozukara/OpenPanelX.git
+cd OpenPanelX
 npm install
 npm run build
-node .next/standalone/server.js   # or: npm run dev
+npm start
 ```
 
-Open http://localhost:3100 (dev) and create your admin account.
-For plain-http local testing of a production build, set `OPENPANELX_INSECURE=1`.
-Behind HTTPS, leave it unset so session cookies are marked `Secure`.
+Open http://localhost:3100 and create your admin account. That is the whole setup.
+
+- Another port: `npm start -- -p 8080`
+- Trying it out or changing code: `npm run dev` instead of build and start.
+- Over plain http on a non-localhost address, sign-in cookies are refused by browsers. Put the panel behind HTTPS, or for a quick private test set `OPENPANELX_INSECURE=1`.
 
 Your data lives in `./data` (SQLite file and a generated signing secret). Back that folder up. Never commit it.
 

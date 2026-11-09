@@ -96,7 +96,7 @@ export function ThemeToggle({ labels }: { labels: Record<Theme, string> }) {
 
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("oha_theme");
+      const saved = localStorage.getItem("opx_theme");
       if (saved === "light" || saved === "dark") setTheme(saved);
     } catch {}
   }, []);
@@ -104,7 +104,7 @@ export function ThemeToggle({ labels }: { labels: Record<Theme, string> }) {
   const apply = (next: Theme) => {
     setTheme(next);
     try {
-      localStorage.setItem("oha_theme", next);
+      localStorage.setItem("opx_theme", next);
     } catch {}
     document.documentElement.setAttribute("data-theme", next);
   };

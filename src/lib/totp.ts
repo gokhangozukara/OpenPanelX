@@ -67,7 +67,7 @@ export function checkTotp(secret: string, token: string, lastStep: number): numb
 }
 
 export const otpauthUri = (secret: string, account: string) =>
-  `otpauth://totp/${encodeURIComponent("OpenHubAdmin")}:${encodeURIComponent(account)}?secret=${secret}&issuer=${encodeURIComponent("OpenHubAdmin")}&algorithm=SHA1&digits=6&period=30`;
+  `otpauth://totp/${encodeURIComponent("OpenPanelX")}:${encodeURIComponent(account)}?secret=${secret}&issuer=${encodeURIComponent("OpenPanelX")}&algorithm=SHA1&digits=6&period=30`;
 
 // The authenticator secret is stored encrypted, so a copied database file alone cannot be used to
 // generate codes. The key comes from the panel's signing secret.

@@ -5,12 +5,12 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { dataDir, db, type Role, type UserRow } from "./db";
 
-const COOKIE = "oha_session";
+const COOKIE = "opx_session";
 const MAX_AGE = 60 * 60 * 24 * 7;
 const RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
 
 export function appSecret(): string {
-  if (process.env.OPENHUBADMIN_SECRET) return process.env.OPENHUBADMIN_SECRET;
+  if (process.env.OPENPANELX_SECRET) return process.env.OPENPANELX_SECRET;
   const file = path.join(dataDir, "secret");
   mkdirSync(dataDir, { recursive: true }); // the folder may not exist yet on a fresh install
   if (!existsSync(file)) writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600 });
@@ -37,7 +37,7 @@ const cookieOptions = (maxAge: number) => ({
   sameSite: "lax" as const,
   path: "/",
   maxAge,
-  secure: process.env.NODE_ENV === "production" && process.env.OPENHUBADMIN_INSECURE !== "1",
+  secure: process.env.NODE_ENV === "production" && process.env.OPENPANELX_INSECURE !== "1",
 });
 
 function pack(userId: number, ttlMs: number) {
@@ -62,7 +62,7 @@ function unpack(raw: string | undefined): number | null {
 
 // Between the password step and the code step the person is not signed in yet. This short-lived,
 // separately named cookie only lets them reach the code page; it never counts as a session.
-const PENDING = "oha_pending";
+const PENDING = "opx_pending";
 export async function startPending(userId: number) {
   (await cookies()).set(PENDING, pack(userId, 5 * 60_000), cookieOptions(300));
 }

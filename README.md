@@ -1,4 +1,4 @@
-# OpenHubAdmin
+# OpenPanelX
 
 A small, clean admin panel. Sign-in, roles and plugins work out of the box.
 
@@ -19,7 +19,7 @@ node .next/standalone/server.js   # or: npm run dev
 ```
 
 Open http://localhost:3100 (dev) and create your admin account.
-For plain-http local testing of a production build, set `OPENHUBADMIN_INSECURE=1`.
+For plain-http local testing of a production build, set `OPENPANELX_INSECURE=1`.
 Behind HTTPS, leave it unset so session cookies are marked `Secure`.
 
 Your data lives in `./data` (SQLite file and a generated signing secret). Back that folder up. Never commit it.

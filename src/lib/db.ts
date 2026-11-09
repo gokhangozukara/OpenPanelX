@@ -2,10 +2,10 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-export const dataDir = process.env.OPENHUBADMIN_DATA ?? path.join(process.cwd(), "data");
+export const dataDir = process.env.OPENPANELX_DATA ?? path.join(process.cwd(), "data");
 
 declare global {
-  var __ohaDb: DatabaseSync | undefined;
+  var __opxDb: DatabaseSync | undefined;
 }
 
 function open() {
@@ -51,7 +51,7 @@ function open() {
 // Opened on first use, not on import, so `next build` workers do not fight over the file.
 export const db: DatabaseSync = new Proxy({} as DatabaseSync, {
   get(_, prop) {
-    const real = (globalThis.__ohaDb ??= open());
+    const real = (globalThis.__opxDb ??= open());
     const value = Reflect.get(real, prop, real);
     return typeof value === "function" ? value.bind(real) : value;
   },

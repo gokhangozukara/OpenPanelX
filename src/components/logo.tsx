@@ -10,7 +10,7 @@ export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
           <path d="M17 13.5v7M13.5 17h7" />
         </svg>
       </span>
-      <span className={size === "lg" ? "text-xl font-semibold tracking-tight" : "text-[15px] font-semibold tracking-tight"}>OpenHubAdmin</span>
+      <span className={size === "lg" ? "text-xl font-semibold tracking-tight" : "text-[15px] font-semibold tracking-tight"}>OpenPanelX</span>
     </div>
   );
 }

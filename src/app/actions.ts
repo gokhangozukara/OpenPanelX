@@ -262,7 +262,7 @@ export async function deleteRow(pluginId: string, index: number, form: FormData)
 export async function setLanguage(form: FormData) {
   const v = str(form, "lang");
   if (v === "en" || v === "tr" || v === "de") {
-    (await cookies()).set("oha_lang", v, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+    (await cookies()).set("opx_lang", v, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   }
   revalidatePath("/", "layout");
 }

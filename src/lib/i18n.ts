@@ -255,7 +255,7 @@ const DICTS: Record<Lang, Dict> = { en, tr, de };
 export type T = (key: keyof typeof en) => string;
 
 export async function getLang(): Promise<Lang> {
-  const v = (await cookies()).get("oha_lang")?.value;
+  const v = (await cookies()).get("opx_lang")?.value;
   return v === "tr" || v === "de" || v === "en" ? v : "en";
 }
 

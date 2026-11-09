@@ -1,4 +1,4 @@
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 
 export const LANGS = { en: "English", tr: "Türkçe", de: "Deutsch" } as const;
 export type Lang = keyof typeof LANGS;
@@ -254,9 +254,17 @@ const de: Dict = {
 const DICTS: Record<Lang, Dict> = { en, tr, de };
 export type T = (key: keyof typeof en) => string;
 
+/**
+ * 1. A language the person picked in the panel always wins.
+ * 2. Otherwise the browser's main language: Turkish -> Turkish, German -> German.
+ * 3. Anything else -> English.
+ */
 export async function getLang(): Promise<Lang> {
   const v = (await cookies()).get("opx_lang")?.value;
-  return v === "tr" || v === "de" || v === "en" ? v : "en";
+  if (v === "tr" || v === "de" || v === "en") return v;
+  const first = ((await headers()).get("accept-language") ?? "").split(",")[0]?.trim().toLowerCase() ?? "";
+  const main = first.split(";")[0].split("-")[0];
+  return main === "tr" || main === "de" ? main : "en";
 }
 
 export async function getT(): Promise<{ t: T; lang: Lang }> {

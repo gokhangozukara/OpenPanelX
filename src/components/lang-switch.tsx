@@ -1,7 +1,8 @@
 import { setLanguage } from "@/app/actions";
 import { LANGS, getLang } from "@/lib/i18n";
 
-export async function LangSwitch() {
+/** `compact` shows short codes (EN, TR, DE) for tight places like the sidebar. */
+export async function LangSwitch({ compact = false }: { compact?: boolean }) {
   const current = await getLang();
   return (
     <div className="inline-flex rounded-lg border border-line bg-surface p-0.5">
@@ -10,11 +11,13 @@ export async function LangSwitch() {
           <input type="hidden" name="lang" value={code} />
           <button
             aria-pressed={current === code}
-            className={`inline-flex h-8 cursor-pointer items-center rounded-md px-3 text-sm transition ${
+            aria-label={LANGS[code]}
+            title={LANGS[code]}
+            className={`inline-flex cursor-pointer items-center rounded-md text-sm transition ${compact ? "h-7 px-2 text-xs" : "h-8 px-3"} ${
               current === code ? "bg-soft font-medium text-fg" : "text-muted hover:text-fg"
             }`}
           >
-            {LANGS[code]}
+            {compact ? code.toUpperCase() : LANGS[code]}
           </button>
         </form>
       ))}

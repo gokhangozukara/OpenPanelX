@@ -1,3 +1,5 @@
+import { ThemeButton } from "@/components/forms";
+import { LangSwitch } from "@/components/lang-switch";
 import { Shell, type NavItem } from "@/components/shell";
 import { hasRole, requireUser } from "@/lib/auth";
 import { getT, pick } from "@/lib/i18n";
@@ -30,6 +32,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       signOutAction={signOut}
       openMenu={t("openMenu")}
       closeMenu={t("closeMenu")}
+      quick={
+        <>
+          <LangSwitch compact />
+          <ThemeButton lightLabel={t("light")} darkLabel={t("dark")} />
+        </>
+      }
     >
       {children}
     </Shell>

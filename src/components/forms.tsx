@@ -90,6 +90,41 @@ export function Field({
 
 type Theme = "light" | "dark";
 
+/** One small button that flips between light and dark. For the sidebar. */
+export function ThemeButton({ lightLabel, darkLabel }: { lightLabel: string; darkLabel: string }) {
+  const [theme, setTheme] = useState<Theme>("light");
+
+  useEffect(() => {
+    // Follow whatever is actually applied, so this stays in sync with the Settings page.
+    const read = () => setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light");
+    read();
+    const obs = new MutationObserver(read);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => obs.disconnect();
+  }, []);
+
+  const flip = () => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    try {
+      localStorage.setItem("opx_theme", next);
+    } catch {}
+    document.documentElement.setAttribute("data-theme", next);
+  };
+
+  const label = theme === "dark" ? lightLabel : darkLabel;
+  return (
+    <button
+      type="button"
+      onClick={flip}
+      aria-label={label}
+      title={label}
+      className="grid size-8 cursor-pointer place-items-center rounded-lg border border-line bg-surface text-muted transition hover:text-fg"
+    >
+      {theme === "dark" ? <Sun className="size-4" aria-hidden /> : <Moon className="size-4" aria-hidden />}
+    </button>
+  );
+}
+
 /** Light is the default. Dark is only used when the person picks it. */
 export function ThemeToggle({ labels }: { labels: Record<Theme, string> }) {
   const [theme, setTheme] = useState<Theme>("light");

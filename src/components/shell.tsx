@@ -19,8 +19,11 @@ export function Shell({
   signOutAction,
   openMenu,
   closeMenu,
+  quick,
   children,
 }: {
+  /** Language and theme quick controls, rendered on the server and shown above the user card. */
+  quick?: React.ReactNode;
   nav: NavItem[];
   plugins: NavItem[];
   pluginsLabel: string;
@@ -73,7 +76,8 @@ export function Shell({
             {plugins.map(link)}
           </nav>
         )}
-        <div className="mt-auto flex items-center gap-2.5 rounded-lg border border-line bg-surface p-2.5">
+        {quick && <div className="mt-auto flex items-center justify-between gap-2">{quick}</div>}
+        <div className={`${quick ? "" : "mt-auto "}flex items-center gap-2.5 rounded-lg border border-line bg-surface p-2.5`}>
           <div className="grid size-8 shrink-0 place-items-center rounded-full bg-soft text-xs font-semibold uppercase">
             {username.slice(0, 2)}
           </div>

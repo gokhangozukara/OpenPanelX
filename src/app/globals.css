@@ -30,22 +30,6 @@
   color-scheme: dark;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]):not([data-theme="dark"]) {
-    --bg: #09090b;
-    --surface: #111113;
-    --soft: #18181b;
-    --fg: #fafafa;
-    --muted: #a1a1aa;
-    --line: #27272a;
-    --accent: #fafafa;
-    --accent-fg: #09090b;
-    --danger: #f87171;
-    --ok: #4ade80;
-    color-scheme: dark;
-  }
-}
-
 @theme inline {
   --color-bg: var(--bg);
   --color-surface: var(--surface);

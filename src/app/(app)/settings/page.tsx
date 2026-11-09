@@ -29,7 +29,7 @@ export default async function SettingsPage() {
         </div>
         <div>
           <p className="label">{t("theme")}</p>
-          <ThemeToggle labels={{ light: t("light"), dark: t("dark"), system: t("system") }} />
+          <ThemeToggle labels={{ light: t("light"), dark: t("dark") }} />
         </div>
       </section>
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Sun, Moon, Monitor } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { useActionState, useEffect, useState } from "react";
 import type { FormState } from "@/app/actions";
 
@@ -88,10 +88,11 @@ export function Field({
   );
 }
 
-type Theme = "light" | "dark" | "system";
+type Theme = "light" | "dark";
 
+/** Light is the default. Dark is only used when the person picks it. */
 export function ThemeToggle({ labels }: { labels: Record<Theme, string> }) {
-  const [theme, setTheme] = useState<Theme>("system");
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     try {
@@ -103,17 +104,14 @@ export function ThemeToggle({ labels }: { labels: Record<Theme, string> }) {
   const apply = (next: Theme) => {
     setTheme(next);
     try {
-      if (next === "system") localStorage.removeItem("oha_theme");
-      else localStorage.setItem("oha_theme", next);
+      localStorage.setItem("oha_theme", next);
     } catch {}
-    if (next === "system") document.documentElement.removeAttribute("data-theme");
-    else document.documentElement.setAttribute("data-theme", next);
+    document.documentElement.setAttribute("data-theme", next);
   };
 
   const opts: { v: Theme; icon: typeof Sun }[] = [
     { v: "light", icon: Sun },
     { v: "dark", icon: Moon },
-    { v: "system", icon: Monitor },
   ];
   return (
     <div className="inline-flex rounded-lg border border-line bg-surface p-0.5" role="radiogroup">

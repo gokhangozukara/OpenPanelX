@@ -7,7 +7,10 @@ import { getT } from "@/lib/i18n";
 import { open, otpauthUri } from "@/lib/totp";
 import { cancelTotpSetup, changePassword, confirmTotp, disableTotp, startTotpSetup } from "../../actions";
 
-export const metadata = { title: "Settings" };
+export async function generateMetadata() {
+  const { t } = await getT();
+  return { title: t("settings") };
+}
 
 export default async function SettingsPage() {
   const me = await requireUser();

@@ -1,5 +1,17 @@
 [
-  { "title": "Plan the first release", "owner": "team", "status": "In progress" },
-  { "title": "Write the install guide", "owner": "team", "status": "Todo" },
-  { "title": "Add a second language", "owner": "team", "status": "Done" }
+  {
+    "title": { "en": "Plan the first release", "tr": "İlk sürümü planla", "de": "Den ersten Release planen" },
+    "owner": { "en": "team", "tr": "ekip", "de": "Team" },
+    "status": { "en": "In progress", "tr": "Devam ediyor", "de": "In Arbeit" }
+  },
+  {
+    "title": { "en": "Write the install guide", "tr": "Kurulum rehberini yaz", "de": "Installationsanleitung schreiben" },
+    "owner": { "en": "team", "tr": "ekip", "de": "Team" },
+    "status": { "en": "Todo", "tr": "Yapılacak", "de": "Offen" }
+  },
+  {
+    "title": { "en": "Add a second language", "tr": "İkinci bir dil ekle", "de": "Eine zweite Sprache hinzufügen" },
+    "owner": { "en": "team", "tr": "ekip", "de": "Team" },
+    "status": { "en": "Done", "tr": "Bitti", "de": "Erledigt" }
+  }
 ]

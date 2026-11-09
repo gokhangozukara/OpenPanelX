@@ -1,8 +1,13 @@
 import { addRow, deleteRow } from "@/app/actions";
 import type { Lang, T } from "@/lib/i18n";
 import { pick } from "@/lib/i18n";
-import { systemValue, tableRows, type Plugin, type Section } from "@/lib/plugins";
+import { systemValue, tableRows, type Cell, type Plugin, type Section } from "@/lib/plugins";
 import { ActionForm } from "./forms";
+
+function cellText(value: Cell | undefined, lang: Lang): string {
+  if (value && typeof value === "object") return pick(value, lang);
+  return String(value ?? "");
+}
 
 export function Sections({ plugin, lang, t, canEdit }: { plugin: Plugin; lang: Lang; t: T; canEdit: boolean }) {
   return (
@@ -15,7 +20,7 @@ export function Sections({ plugin, lang, t, canEdit }: { plugin: Plugin; lang: L
                 <div key={j} className="card p-5">
                   <p className="text-xs text-muted">{pick(it.label, lang)}</p>
                   <p className="mt-2 text-2xl font-semibold tracking-tight tabular-nums">
-                    {it.source ? systemValue(it.source) : String(it.value ?? "–")}
+                    {it.source ? systemValue(it.source, lang) : String(it.value ?? "–")}
                   </p>
                 </div>
               ))}
@@ -48,7 +53,7 @@ export function Sections({ plugin, lang, t, canEdit }: { plugin: Plugin; lang: L
                         <tr key={String(row._id ?? r)} className="border-b border-line last:border-0">
                           {s.columns.map((c) => (
                             <td key={c.key} className="px-5 py-3">
-                              {String(row[c.key] ?? "")}
+                              {cellText(row[c.key], lang)}
                             </td>
                           ))}
                           {editing && (

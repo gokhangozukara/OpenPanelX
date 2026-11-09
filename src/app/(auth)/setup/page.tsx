@@ -4,7 +4,10 @@ import { userCount } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { setupAdmin } from "../../actions";
 
-export const metadata = { title: "Setup" };
+export async function generateMetadata() {
+  const { t } = await getT();
+  return { title: t("setupTitle") };
+}
 
 export default async function SetupPage() {
   if (userCount() > 0) redirect("/login");

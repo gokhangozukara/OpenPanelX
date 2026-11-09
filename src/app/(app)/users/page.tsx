@@ -4,7 +4,10 @@ import { db, type UserRow } from "@/lib/db";
 import { getT } from "@/lib/i18n";
 import { addUser, deleteUser, resetUserTotp } from "../../actions";
 
-export const metadata = { title: "Users" };
+export async function generateMetadata() {
+  const { t } = await getT();
+  return { title: t("users") };
+}
 
 export default async function UsersPage() {
   const me = await requireUser("admin");

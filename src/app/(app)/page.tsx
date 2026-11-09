@@ -3,12 +3,42 @@ import Link from "next/link";
 import { NavIcon } from "@/components/icons";
 import { hasRole, requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { getT, pick } from "@/lib/i18n";
+import { getT, pick, type T } from "@/lib/i18n";
 import { listPlugins, systemValue } from "@/lib/plugins";
 
-export const metadata = { title: "Dashboard" };
+export async function generateMetadata() {
+  const { t } = await getT();
+  return { title: t("dashboard") };
+}
 
 type AuditRow = { id: number; at: string; actor: string | null; action: string; detail: string | null };
+
+// The log stores language-free codes; they are turned into a sentence in the reader's language here.
+const ACTIONS: Record<string, Parameters<T>[0]> = {
+  login: "actLogin",
+  "login.failed": "actLoginFailed",
+  "login.2fa-failed": "act2faFailed",
+  "login.recovery-code": "actRecovery",
+  setup: "actSetup",
+  "user.add": "actUserAdd",
+  "user.delete": "actUserDelete",
+  "password.change": "actPasswordChange",
+  "2fa.enable": "act2faEnable",
+  "2fa.disable": "act2faDisable",
+  "2fa.reset": "act2faReset",
+  "row.add": "actRowAdd",
+  "row.delete": "actRowDelete",
+};
+
+function describe(r: AuditRow, t: T): string {
+  const key = ACTIONS[r.action];
+  const label = key ? t(key) : r.action;
+  // The first-admin note was stored in English; the sentence already says it, so drop it.
+  if (!r.detail || r.action === "setup") return label;
+  // "name (viewer)" -> "name (İzleyici)": show the role in the reader's language.
+  const detail = r.detail.replace(/\((admin|editor|viewer)\)$/, (_, role) => `(${t(role)})`);
+  return `${label} ${detail}`;
+}
 
 export default async function Dashboard({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
   const user = await requireUser();
@@ -22,8 +52,8 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
   const stats = [
     { label: t("statUsers"), value: String(users) },
     { label: t("statPlugins"), value: String(plugins.length) },
-    { label: t("statUptime"), value: systemValue("@system.uptime") },
-    { label: t("statMemory"), value: systemValue("@system.memory") },
+    { label: t("statUptime"), value: systemValue("@system.uptime", lang) },
+    { label: t("statMemory"), value: systemValue("@system.memory", lang) },
   ];
 
   return (
@@ -61,10 +91,7 @@ export default async function Dashboard({ searchParams }: { searchParams: Promis
                 <li key={r.id} className="flex items-baseline justify-between gap-4 border-b border-line px-5 py-3 last:border-0">
                   <p className="min-w-0 truncate">
                     <span className="font-medium">{r.actor ?? "–"}</span>{" "}
-                    <span className="text-muted">
-                      {r.action}
-                      {r.detail ? ` · ${r.detail}` : ""}
-                    </span>
+                    <span className="text-muted">{describe(r, t)}</span>
                   </p>
                   <time className="shrink-0 text-xs text-muted tabular-nums">{r.at.slice(5, 16)}</time>
                 </li>

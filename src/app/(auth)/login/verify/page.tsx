@@ -5,7 +5,10 @@ import { getPending } from "@/lib/auth";
 import { getT } from "@/lib/i18n";
 import { verifyLogin } from "../../../actions";
 
-export const metadata = { title: "Verify" };
+export async function generateMetadata() {
+  const { t } = await getT();
+  return { title: t("verifyTitle") };
+}
 
 export default async function VerifyPage() {
   if ((await getPending()) === null) redirect("/login");

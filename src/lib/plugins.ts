@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Localized } from "./i18n";
+import type { Lang, Localized } from "./i18n";
 import { dataDir, type Role } from "./db";
 
-export type Row = Record<string, string | number>;
+/** A cell is plain text, a number, or text per language: { "en": "", "tr": "", "de": "" }. */
+export type Cell = string | number | Partial<Record<Lang, string>>;
+export type Row = Record<string, Cell>;
 
 /**
  * A plugin is a folder inside /plugins with a plugin.json. No build step, no code in the core:
@@ -91,17 +93,21 @@ export function saveRows(plugin: Plugin, index: number, rows: Row[]) {
   writeFileSync(storeFile(plugin, index), JSON.stringify(rows, null, 2));
 }
 
-function fmtDuration(sec: number) {
+// Short unit names per language: day, hour, minute.
+const UNITS: Record<Lang, [string, string, string]> = { en: ["d", "h", "m"], tr: ["g", "sa", "dk"], de: ["T", "Std", "Min"] };
+
+function fmtDuration(sec: number, lang: Lang) {
+  const [D, H, M] = UNITS[lang];
   const d = Math.floor(sec / 86400);
   const h = Math.floor((sec % 86400) / 3600);
   const m = Math.floor((sec % 3600) / 60);
-  return d ? `${d}d ${h}h` : h ? `${h}h ${m}m` : `${m}m`;
+  return d ? `${d} ${D} ${h} ${H}` : h ? `${h} ${H} ${m} ${M}` : `${m} ${M}`;
 }
 
-export function systemValue(source: string): string {
+export function systemValue(source: string, lang: Lang = "en"): string {
   switch (source) {
     case "@system.uptime":
-      return fmtDuration(os.uptime());
+      return fmtDuration(os.uptime(), lang);
     case "@system.memory": {
       const used = os.totalmem() - os.freemem();
       return `${Math.round((used / os.totalmem()) * 100)}%`;

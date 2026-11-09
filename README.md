@@ -50,6 +50,7 @@ Create `plugins/my-plugin/plugin.json`:
 - `name`, `title`, `label`, `body` can be plain text or `{ "en": "", "tr": "", "de": "" }`.
 - `minRole`: `viewer`, `editor` or `admin`. People below it do not see the plugin.
 - Section types: `stats`, `table`, `text`. A table reads rows from `rows` or from a JSON file inside the plugin folder.
+- A table cell can also be text per language, e.g. `{ "en": "Done", "tr": "Bitti", "de": "Erledigt" }`. Text you type into an editable table is shown as typed, in every language.
 - Add `"editable": true` to a table and editors and admins can add and delete rows. Edits are stored in `data/plugins/`, never inside the plugin folder, so updating a plugin never erases what people entered. Limits: 1000 rows, 500 characters per cell.
 - Live server numbers for stats: `"source": "@system.uptime"`, `@system.memory`, `@system.cpus`, `@system.load`, `@system.host`.
 - Icons: `dashboard`, `users`, `settings`, `puzzle`, `notebook`, `activity`, `server`, `list`.

@@ -1,0 +1,26 @@
+{
+  "name": { "en": "Server status", "tr": "Sunucu durumu", "de": "Serverstatus" },
+  "description": { "en": "Live numbers from the machine this panel runs on.", "tr": "Panelin çalıştığı makineden canlı değerler.", "de": "Live-Werte der Maschine, auf der das Panel läuft." },
+  "icon": "server",
+  "minRole": "viewer",
+  "sections": [
+    {
+      "type": "stats",
+      "items": [
+        { "label": { "en": "Uptime", "tr": "Çalışma süresi", "de": "Laufzeit" }, "source": "@system.uptime" },
+        { "label": { "en": "Memory in use", "tr": "Kullanılan bellek", "de": "Belegter Speicher" }, "source": "@system.memory" },
+        { "label": { "en": "CPU cores", "tr": "İşlemci çekirdeği", "de": "CPU-Kerne" }, "source": "@system.cpus" },
+        { "label": { "en": "Load (1 min)", "tr": "Yük (1 dk)", "de": "Last (1 Min)" }, "source": "@system.load" }
+      ]
+    },
+    {
+      "type": "text",
+      "title": { "en": "How this works", "tr": "Bu nasıl çalışıyor", "de": "So funktioniert das" },
+      "body": {
+        "en": "This page is just a plugin.json file in the plugins folder. No code, no rebuild.",
+        "tr": "Bu sayfa plugins klasöründeki tek bir plugin.json dosyası. Kod yok, yeniden derleme yok.",
+        "de": "Diese Seite ist nur eine plugin.json-Datei im Ordner plugins. Kein Code, kein Neubau."
+      }
+    }
+  ]
+}

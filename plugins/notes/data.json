@@ -1,0 +1,5 @@
+[
+  { "title": "Plan the first release", "owner": "team", "status": "In progress" },
+  { "title": "Write the install guide", "owner": "team", "status": "Todo" },
+  { "title": "Add a second language", "owner": "team", "status": "Done" }
+]

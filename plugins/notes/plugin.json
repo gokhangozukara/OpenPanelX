@@ -1,0 +1,19 @@
+{
+  "name": { "en": "Notes", "tr": "Notlar", "de": "Notizen" },
+  "description": { "en": "A table fed from a JSON file next to this manifest.", "tr": "Bu dosyanın yanındaki bir JSON dosyasından beslenen tablo.", "de": "Eine Tabelle, die aus einer JSON-Datei neben diesem Manifest gespeist wird." },
+  "icon": "notebook",
+  "minRole": "viewer",
+  "sections": [
+    {
+      "type": "table",
+      "title": { "en": "Team notes", "tr": "Ekip notları", "de": "Team-Notizen" },
+      "columns": [
+        { "key": "title", "label": { "en": "Title", "tr": "Başlık", "de": "Titel" } },
+        { "key": "owner", "label": { "en": "Owner", "tr": "Sahibi", "de": "Besitzer" } },
+        { "key": "status", "label": { "en": "Status", "tr": "Durum", "de": "Status" } }
+      ],
+      "file": "data.json",
+      "editable": true
+    }
+  ]
+}

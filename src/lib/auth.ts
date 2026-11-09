@@ -1,5 +1,5 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -12,6 +12,7 @@ const RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
 export function appSecret(): string {
   if (process.env.OPENHUBADMIN_SECRET) return process.env.OPENHUBADMIN_SECRET;
   const file = path.join(dataDir, "secret");
+  mkdirSync(dataDir, { recursive: true }); // the folder may not exist yet on a fresh install
   if (!existsSync(file)) writeFileSync(file, randomBytes(32).toString("hex"), { mode: 0o600 });
   return readFileSync(file, "utf8").trim();
 }

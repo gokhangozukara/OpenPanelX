@@ -7,6 +7,7 @@ const RATE_LIMIT_WINDOW_MS = 15 * 60_000;
 const RATE_LIMIT_MAX = 5;
 export const DEFAULT_ACCOUNT_MAX = 20;
 export const MAX_LOGIN_QUEUE_WAIT_MS = 4000;
+export const MAX_RATE_LIMIT_ROWS = 5000;
 const KNOWN_USER_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type TokenType = "session" | "pending";
@@ -139,6 +140,17 @@ export function tooManyAttempts(key: string, maxAttempts = RATE_LIMIT_MAX): bool
   return getFailureCount(key) >= maxAttempts;
 }
 
+function enforceRateLimitCap(maxRows = MAX_RATE_LIMIT_ROWS): void {
+  const total = (db.prepare("SELECT COUNT(*) AS n FROM rate_limits").get() as { n: number }).n;
+  if (total < maxRows) return;
+  const excess = total - maxRows + 1;
+  db.prepare(
+    `DELETE FROM rate_limits WHERE key IN (
+       SELECT key FROM rate_limits ORDER BY count ASC, until ASC LIMIT ?
+     )`,
+  ).run(excess);
+}
+
 /**
  * Atomically reserves an exclusive execution slot for a sign-in attempt in SQLite.
  * Serializes concurrent requests so parallel bursts cannot bypass pacing, rejects overflow
@@ -146,11 +158,12 @@ export function tooManyAttempts(key: string, maxAttempts = RATE_LIMIT_MAX): bool
  */
 export function reserveLoginSlot(
   key: string,
-  opts?: { hardMax?: number; maxQueueWaitMs?: number; now?: number },
+  opts?: { hardMax?: number; maxQueueWaitMs?: number; maxRows?: number; now?: number },
 ): { allowed: boolean; waitMs: number; count: number } {
   const now = opts?.now ?? Date.now();
   const maxQueueWaitMs = opts?.maxQueueWaitMs ?? MAX_LOGIN_QUEUE_WAIT_MS;
   const hardMax = opts?.hardMax;
+  const maxRows = opts?.maxRows ?? MAX_RATE_LIMIT_ROWS;
 
   db.exec("BEGIN IMMEDIATE");
   try {
@@ -175,6 +188,8 @@ export function reserveLoginSlot(
       return { allowed: false, waitMs, count: activeCount };
     }
 
+    if (!row) enforceRateLimitCap(maxRows);
+
     const nextAt = runAt + loginStepMs(activeCount);
     db.prepare(
       `INSERT INTO rate_limits (key, count, until, next_at) VALUES (?, ?, ?, ?)
@@ -191,13 +206,15 @@ export function reserveLoginSlot(
   }
 }
 
-export function noteFailure(key: string, now = Date.now()): void {
+export function noteFailure(key: string, now = Date.now(), maxRows = MAX_RATE_LIMIT_ROWS): void {
   const nextUntil = now + RATE_LIMIT_WINDOW_MS;
   db.exec("BEGIN IMMEDIATE");
   try {
+    db.prepare("DELETE FROM rate_limits WHERE until <= ? AND next_at <= ?").run(now, now);
     const row = db.prepare("SELECT count, until, next_at FROM rate_limits WHERE key = ?").get(key) as
       | { count: number; until: number; next_at: number }
       | undefined;
+    if (!row) enforceRateLimitCap(maxRows);
     const nextCount = !row || row.until <= now ? 1 : row.count + 1;
     const until = !row || row.until <= now ? nextUntil : row.until;
     const nextAt = Math.max(row?.next_at ?? 0, now + loginStepMs(nextCount));

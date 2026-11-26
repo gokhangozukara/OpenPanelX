@@ -3,7 +3,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { resetDbForTests } from "../src/lib/db";
+import { db, resetDbForTests } from "../src/lib/db";
 import { getPlugin, listPlugins, mutateTableRows, saveRows, seedRows, tableRows } from "../src/lib/plugins";
 import {
   clearFailures,
@@ -146,6 +146,21 @@ describe("rate limits, serialized pacing, and proxy headers", () => {
     assert.equal(tooManyAttempts(attackerKey, 5), true);
     assert.equal(tooManyAttempts(realAdminKey, 5), false);
     clearFailures(attackerKey);
+  });
+
+  it("caps rate_limits table growth while preserving high-count lockouts", () => {
+    const lockedKey = "ipuser|203.0.113.99|admin";
+    const now = Date.now() + 20_000;
+    for (let i = 0; i < 6; i++) noteFailure(lockedKey, now, 10);
+
+    for (let i = 0; i < 25; i++) {
+      reserveLoginSlot(`user|random-spray-${i}`, { maxRows: 10, now: now + i });
+    }
+
+    const total = (db.prepare("SELECT COUNT(*) AS n FROM rate_limits").get() as { n: number }).n;
+    assert.ok(total <= 10, `Expected <= 10 rows, got ${total}`);
+    assert.equal(tooManyAttempts(lockedKey, 5), true);
+    db.prepare("DELETE FROM rate_limits").run();
   });
 
   it("ignores forwarded IP headers unless OPENPANELX_TRUST_PROXY is enabled", () => {

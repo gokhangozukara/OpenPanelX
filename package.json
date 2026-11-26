@@ -1,6 +1,6 @@
 {
   "name": "openpanelx",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "private": true,
   "description": "Minimal, plugin-ready admin panel with sign-in and roles built in.",
   "license": "MIT",

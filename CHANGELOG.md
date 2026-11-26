@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.3
+
+### Security
+- Serialized concurrent sign-in attempts per account in SQLite (`rate_limits.next_at` via `BEGIN IMMEDIATE`), immediately rejecting parallel burst overflow without invoking `scrypt`.
+- Added a default hard ceiling of 20 failed attempts per 15 minutes per account when `OPENPANELX_TRUST_PROXY` is unset, while issuing a non-session HMAC-signed `opx_known` cookie to previously authenticated browsers so admins are not locked out on their own device.
+- Tightened production `style-src` CSP to `'self' 'nonce-...'` (removing `'unsafe-inline'` in production for both scripts and styles), verified in Playwright E2E including Settings 2FA QR rendering.
+
 ## v0.4.2
 
 ### Security & Testing

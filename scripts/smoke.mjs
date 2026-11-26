@@ -44,15 +44,19 @@ async function waitForHealth(timeoutMs = 15_000) {
 }
 
 function extractScriptNonce(csp) {
-  const scriptSrc = csp
-    .split(";")
-    .map((part) => part.trim())
-    .find((part) => part.startsWith("script-src "));
+  const parts = csp.split(";").map((part) => part.trim());
+  const scriptSrc = parts.find((part) => part.startsWith("script-src "));
   assert.ok(scriptSrc, `Missing script-src directive in CSP: ${csp}`);
   assert.equal(scriptSrc.includes("'unsafe-inline'"), false, `script-src must not allow unsafe-inline: ${scriptSrc}`);
   assert.ok(scriptSrc.includes("'strict-dynamic'"), `script-src must include strict-dynamic: ${scriptSrc}`);
   const match = scriptSrc.match(/'nonce-([^']+)'/);
   assert.ok(match && match[1], `Missing nonce in script-src: ${scriptSrc}`);
+
+  const styleSrc = parts.find((part) => part.startsWith("style-src "));
+  assert.ok(styleSrc, `Missing style-src directive in CSP: ${csp}`);
+  assert.equal(styleSrc.includes("'unsafe-inline'"), false, `style-src must not allow unsafe-inline in production: ${styleSrc}`);
+  assert.ok(styleSrc.includes(`'nonce-${match[1]}'`), `style-src must carry the same nonce: ${styleSrc}`);
+
   return match[1];
 }
 
@@ -62,7 +66,7 @@ try {
   const health = await healthRes.json();
   assert.equal(health.ok, true);
   assert.equal(health.name, "OpenPanelX");
-  assert.equal(health.version, "0.4.2");
+  assert.equal(health.version, "0.4.3");
 
   const csp1 = healthRes.headers.get("content-security-policy") ?? "";
   assert.ok(csp1.includes("default-src 'self'"), `Missing CSP header: ${csp1}`);

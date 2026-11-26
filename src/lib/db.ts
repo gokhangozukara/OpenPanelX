@@ -40,10 +40,11 @@ function open() {
     CREATE TABLE IF NOT EXISTS rate_limits (
       key TEXT PRIMARY KEY,
       count INTEGER NOT NULL,
-      until INTEGER NOT NULL
+      until INTEGER NOT NULL,
+      next_at INTEGER NOT NULL DEFAULT 0
     );
   `);
-  // Two-step sign-in and session version columns, added in place so existing installs keep their users.
+  // Two-step sign-in, session version, and rate-limit pacing columns, added in place for existing installs.
   const cols = (d.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("totp_secret")) {
     d.exec(`
@@ -54,6 +55,10 @@ function open() {
   }
   if (!cols.includes("session_version")) {
     d.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1;");
+  }
+  const rlCols = (d.prepare("PRAGMA table_info(rate_limits)").all() as { name: string }[]).map((c) => c.name);
+  if (!rlCols.includes("next_at")) {
+    d.exec("ALTER TABLE rate_limits ADD COLUMN next_at INTEGER NOT NULL DEFAULT 0;");
   }
   d.exec("PRAGMA foreign_keys = ON;");
   return d;

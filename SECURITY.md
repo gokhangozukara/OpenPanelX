@@ -14,6 +14,9 @@ Please include steps to reproduce, the affected version, and any relevant detail
 - Session and pending-2FA cookies carry distinct `typ` claims (`session` vs. `pending`), domain-separated HMAC-SHA256 signatures, `HttpOnly`, `SameSite=Lax`, and `Secure` in production by default.
 - Changing a password, changing a user's role, or resetting 2FA increments `session_version` so older sessions are invalidated immediately.
 - TOTP secrets are encrypted at rest with AES-256-GCM; recovery codes are stored only as SHA-256 hashes.
-- Failed sign-in and 2FA rate limits are persisted in SQLite (`rate_limits` table) across server restarts. Sign-in uses bounded per-account backoff (so attackers cannot lock out admins remotely) and enforces IP lockouts when `OPENPANELX_TRUST_PROXY=1` is enabled behind a trusted reverse proxy.
-- Responses include a per-request nonce-based `Content-Security-Policy` (`'strict-dynamic'`, no `'unsafe-inline'` in `script-src`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and `Strict-Transport-Security` (HSTS) in production HTTPS mode.
+- Sign-in throttling is persisted in SQLite (`rate_limits` table) across server restarts:
+  - Concurrent sign-in attempts for the same account are serialized via SQLite time-slot reservation (`next_at` inside `BEGIN IMMEDIATE`), rejecting parallel floods immediately without calling `scrypt`.
+  - When `OPENPANELX_TRUST_PROXY=1` is set behind a trusted reverse proxy, offending client IPs are hard-blocked (5 failures per IP+account, 20 per IP in 15 minutes) without locking out legitimate admins on other IPs.
+  - When running directly without a proxy, unknown browsers hit a hard ceiling of 20 failures per 15 minutes per account, while previously signed-in browsers carry a non-session HMAC-signed `opx_known` cookie so admins are not locked out of their own device.
+- Responses include a per-request nonce-based `Content-Security-Policy` (`script-src 'self' 'nonce-...' 'strict-dynamic'`, `style-src 'self' 'nonce-...'` in production, `script-src-attr 'none'`), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, and `Strict-Transport-Security` (HSTS) in production HTTPS mode.
 - Always deploy OpenPanelX behind HTTPS in production.

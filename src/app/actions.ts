@@ -11,6 +11,8 @@ import {
   getPending,
   hasRole,
   hashPassword,
+  isKnownBrowser,
+  markKnownBrowser,
   noteFailure,
   requireUser,
   startPending,
@@ -22,7 +24,7 @@ import {
 import { audit, db, type Role } from "@/lib/db";
 import { getT } from "@/lib/i18n";
 import { editableTable, getPlugin, MAX_CELL, MAX_ROWS, mutateTableRows, type Row } from "@/lib/plugins";
-import { accountBackoffMs, clientIpFromHeaders } from "@/lib/security";
+import { clientIpFromHeaders, DEFAULT_ACCOUNT_MAX, reserveLoginSlot } from "@/lib/security";
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, open, seal } from "@/lib/totp";
 
 export type FormState = { error?: string; ok?: string; codes?: string[] } | undefined;
@@ -43,8 +45,15 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
     return { error: t("tooMany") };
   }
 
-  const delay = accountBackoffMs(userKey);
-  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+  // Without a trusted reverse proxy IP, enforce a hard 15-minute ceiling (20 attempts) for
+  // unknown browsers while exempting browsers that previously signed into this account.
+  // In all modes, serialize concurrent attempts via SQLite time-slot reservation.
+  const known = await isKnownBrowser(username);
+  const slot = reserveLoginSlot(userKey, {
+    hardMax: !ip && !known ? DEFAULT_ACCOUNT_MAX : undefined,
+  });
+  if (!slot.allowed) return { error: t("tooMany") };
+  if (slot.waitMs > 0) await new Promise((resolve) => setTimeout(resolve, slot.waitMs));
 
   const row = db
     .prepare("SELECT id, password_hash, totp_enabled, session_version FROM users WHERE username = ? COLLATE NOCASE")
@@ -65,6 +74,7 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
     await startPending(row.id);
     redirect("/login/verify");
   }
+  await markKnownBrowser(username);
   await startSession(row.id, row.session_version);
   audit(username, "login");
   redirect("/");
@@ -104,6 +114,7 @@ export async function verifyLogin(_: FormState, form: FormData): Promise<FormSta
   }
   clearFailures(key);
   await clearPending();
+  await markKnownBrowser(user.username);
   await startSession(user.id, user.session_version);
   audit(user.username, "login");
   redirect("/");
@@ -175,6 +186,7 @@ export async function setupAdmin(_: FormState, form: FormData): Promise<FormStat
   const res = db
     .prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')")
     .run(username, hashPassword(password));
+  await markKnownBrowser(username);
   await startSession(Number(res.lastInsertRowid), 1);
   audit(username, "setup", "first admin created");
   redirect("/");

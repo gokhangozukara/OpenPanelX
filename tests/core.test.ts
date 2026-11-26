@@ -6,15 +6,19 @@ import { after, before, describe, it } from "node:test";
 import { resetDbForTests } from "../src/lib/db";
 import { getPlugin, listPlugins, mutateTableRows, saveRows, seedRows, tableRows } from "../src/lib/plugins";
 import {
-  accountBackoffMs,
   clearFailures,
   clientIpFromHeaders,
+  DEFAULT_ACCOUNT_MAX,
   hashPassword,
   isSameOrigin,
+  loginStepMs,
   noteFailure,
+  packKnownUser,
   packToken,
+  reserveLoginSlot,
   tooManyAttempts,
   unpackToken,
+  verifyKnownUser,
   verifyPassword,
 } from "../src/lib/security";
 import { checkTotp, generateTotp, hashRecovery, newRecoveryCodes, newTotpSecret, open, seal } from "../src/lib/totp";
@@ -42,14 +46,22 @@ describe("passwords", () => {
 });
 
 describe("signed tokens", () => {
-  it("separates session and pending token types and rejects tampered or expired tokens", () => {
+  it("separates session, pending, and known-browser token types and rejects tampered or expired tokens", () => {
     const session = packToken("session", 42, 3, 60_000);
     const pending = packToken("pending", 42, 0, 60_000);
+    const known = packKnownUser("Admin", 60_000);
 
     assert.deepEqual(unpackToken(session, "session"), { userId: 42, version: 3 });
     assert.deepEqual(unpackToken(pending, "pending"), { userId: 42, version: 0 });
     assert.equal(unpackToken(pending, "session"), null);
     assert.equal(unpackToken(session, "pending"), null);
+    assert.equal(unpackToken(known, "session"), null);
+    assert.equal(unpackToken(known, "pending"), null);
+
+    assert.equal(verifyKnownUser(known, "admin"), true);
+    assert.equal(verifyKnownUser(known, "other"), false);
+    assert.equal(verifyKnownUser(packKnownUser("admin", -1000), "admin"), false);
+    assert.equal(verifyKnownUser(`${known}x`, "admin"), false);
 
     const [body, sig] = session.split(".");
     assert.equal(unpackToken(`${body}.${sig.slice(0, -1)}X`, "session"), null);
@@ -60,9 +72,9 @@ describe("signed tokens", () => {
   });
 });
 
-describe("rate limits and proxy headers", () => {
+describe("rate limits, serialized pacing, and proxy headers", () => {
   it("persists failed-attempt lockouts across database restarts", () => {
-    const key = "user|alice";
+    const key = "ipuser|203.0.113.5|alice";
     assert.equal(tooManyAttempts(key), false);
     for (let i = 0; i < 4; i++) noteFailure(key);
     assert.equal(tooManyAttempts(key), false);
@@ -76,34 +88,63 @@ describe("rate limits and proxy headers", () => {
     assert.equal(tooManyAttempts(key), false);
   });
 
-  it("isolates IP-user lockouts and applies bounded progressive backoff per account", () => {
+  it("serializes parallel bursts, rejects queue overflow, and enforces default ceiling without locking known browsers", () => {
+    const key = "user|admin";
+    const t0 = Date.now() + 10_000;
+
+    // 1. Parallel burst at identical timestamp t0: slots advance sequentially by 200ms up to 4000ms, then reject immediately.
+    const waits: number[] = [];
+    let rejected = 0;
+    for (let i = 0; i < 30; i++) {
+      const slot = reserveLoginSlot(key, { hardMax: DEFAULT_ACCOUNT_MAX, maxQueueWaitMs: 4000, now: t0 });
+      if (slot.allowed) waits.push(slot.waitMs);
+      else rejected++;
+    }
+    assert.equal(waits[0], 0);
+    assert.equal(waits[1], 200);
+    assert.equal(waits.at(-1), 4000);
+    assert.equal(waits.length, 21);
+    assert.equal(rejected, 9);
+
+    // 2. High failure count scales spacing up to 3000ms and persists across DB restart.
+    clearFailures(key);
+    assert.equal(loginStepMs(0), 200);
+    assert.equal(loginStepMs(3), 250);
+    assert.equal(loginStepMs(5), 1000);
+    assert.equal(loginStepMs(7), 3000);
+    assert.equal(loginStepMs(20), 3000);
+
+    const t1 = t0 + 10_000;
+    for (let i = 0; i < 7; i++) noteFailure(key, t1);
+    resetDbForTests();
+
+    // Immediately after 7 failures, next_at is t1 + 3000: first attempt waits 3000ms, second parallel attempt exceeds 4000ms and is rejected.
+    const first = reserveLoginSlot(key, { hardMax: DEFAULT_ACCOUNT_MAX, maxQueueWaitMs: 4000, now: t1 });
+    assert.equal(first.allowed, true);
+    assert.equal(first.waitMs, 3000);
+    const secondParallel = reserveLoginSlot(key, { hardMax: DEFAULT_ACCOUNT_MAX, maxQueueWaitMs: 4000, now: t1 });
+    assert.equal(secondParallel.allowed, false);
+
+    // 3. After DEFAULT_ACCOUNT_MAX (20) failures, unknown non-proxy clients hit the hard ceiling,
+    //    while known browsers / clean proxy IPs (hardMax undefined) are never hard-locked out.
+    for (let i = 7; i < DEFAULT_ACCOUNT_MAX; i++) noteFailure(key, t1);
+    const blockedAttacker = reserveLoginSlot(key, { hardMax: DEFAULT_ACCOUNT_MAX, maxQueueWaitMs: 4000, now: t1 + 10_000 });
+    assert.equal(blockedAttacker.allowed, false);
+
+    const allowedAdmin = reserveLoginSlot(key, { hardMax: undefined, maxQueueWaitMs: 4000, now: t1 + 10_000 });
+    assert.equal(allowedAdmin.allowed, true);
+    assert.equal(allowedAdmin.waitMs, 0);
+
+    clearFailures(key);
+  });
+
+  it("isolates IP-user lockouts across different client IPs", () => {
     const attackerKey = "ipuser|203.0.113.5|admin";
     const realAdminKey = "ipuser|198.51.100.10|admin";
-    const accountKey = "user|admin";
 
     for (let i = 0; i < 5; i++) noteFailure(attackerKey);
     assert.equal(tooManyAttempts(attackerKey, 5), true);
     assert.equal(tooManyAttempts(realAdminKey, 5), false);
-
-    assert.equal(accountBackoffMs(accountKey), 0);
-    noteFailure(accountKey);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 0);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 250);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 500);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 1000);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 2000);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 3000);
-    noteFailure(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 3000);
-
-    clearFailures(accountKey);
-    assert.equal(accountBackoffMs(accountKey), 0);
     clearFailures(attackerKey);
   });
 

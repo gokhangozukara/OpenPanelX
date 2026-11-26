@@ -16,6 +16,7 @@ test("setup, nonce CSP, theme persistence, Notes search/add/edit/CSV/delete, and
   expect(csp).toContain("'nonce-");
   expect(csp).toContain("'strict-dynamic'");
   expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+  expect(csp).not.toMatch(/style-src[^;]*'unsafe-inline'/);
 
   await expect(page).toHaveURL(/\/setup$/);
   await page.getByLabel("Username").fill("e2e-admin");
@@ -115,6 +116,13 @@ test("setup, nonce CSP, theme persistence, Notes search/add/edit/CSV/delete, and
 
   await viewerRow.getByRole("button", { name: "Delete" }).click();
   await expect(page.locator("tbody tr").filter({ hasText: "e2e-viewer" })).toHaveCount(0);
+
+  // 5. Settings page: verify 2FA QR SVG setup renders cleanly under strict nonce CSP (no inline style violations)
+  await page.getByRole("link", { name: "Settings", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByRole("button", { name: "Set up" }).click();
+  await expect(page.locator("main svg").first()).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
 
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);

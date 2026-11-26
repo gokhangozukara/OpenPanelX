@@ -8,9 +8,11 @@ import {
   hasRole,
   hashPassword,
   noteFailure,
+  packKnownUser,
   packToken,
   tooManyAttempts,
   unpackToken,
+  verifyKnownUser,
   verifyPassword,
 } from "./security";
 
@@ -18,6 +20,8 @@ export { appSecret, clearFailures, hasRole, hashPassword, noteFailure, tooManyAt
 
 const COOKIE = "opx_session";
 const MAX_AGE = 60 * 60 * 24 * 7;
+const KNOWN_COOKIE = "opx_known";
+const KNOWN_MAX_AGE = 60 * 60 * 24 * 30;
 
 const cookieOptions = (maxAge: number) => ({
   httpOnly: true,
@@ -38,6 +42,14 @@ export async function getPending(): Promise<number | null> {
 }
 export async function clearPending() {
   (await cookies()).set(PENDING, "", { path: "/", maxAge: 0 });
+}
+
+export async function markKnownBrowser(username: string) {
+  (await cookies()).set(KNOWN_COOKIE, packKnownUser(username), cookieOptions(KNOWN_MAX_AGE));
+}
+
+export async function isKnownBrowser(username: string): Promise<boolean> {
+  return verifyKnownUser((await cookies()).get(KNOWN_COOKIE)?.value, username);
 }
 
 export async function startSession(userId: number, sessionVersion?: number) {

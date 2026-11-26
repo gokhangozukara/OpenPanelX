@@ -8,7 +8,7 @@ export function proxy(request: NextRequest) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${development ? " 'unsafe-eval'" : ""}`,
     "script-src-attr 'none'",
-    "style-src 'self' 'unsafe-inline'",
+    `style-src 'self' ${development ? "'unsafe-inline'" : `'nonce-${nonce}'`}`,
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `connect-src 'self'${development ? " ws://127.0.0.1:* ws://localhost:*" : ""}`,

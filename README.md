@@ -99,6 +99,10 @@ All plugin endpoints require an active signed-in session cookie, and mutation en
 - Editable plugin table updates are serialized and written atomically via temp-file rename so concurrent edits never corrupt data.
 - Responses include a per-request nonce-based `Content-Security-Policy` (no `'unsafe-inline'` for scripts or styles in production), `Strict-Transport-Security` (in production HTTPS mode), `X-Frame-Options`, and `X-Content-Type-Options`. Always run OpenPanelX behind HTTPS in production. See [SECURITY.md](SECURITY.md) for details.
 
+## Related project
+
+Need a multi-workspace hub with PostgreSQL row-level security, team invitations, and encrypted API connections across multiple apps? Check out [OpenHubPanel](https://github.com/gokhangozukara/OpenHubPanel).
+
 ## License
 
 [MIT](LICENSE). Created by [Gokhan Gozukara](https://github.com/gokhangozukara).

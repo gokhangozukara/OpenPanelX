@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { resetDbForTests } from "../src/lib/db";
-import { getPlugin, listPlugins, saveRows, seedRows, tableRows } from "../src/lib/plugins";
+import { getPlugin, listPlugins, mutateTableRows, saveRows, seedRows, tableRows } from "../src/lib/plugins";
 import {
   clearFailures,
+  clientIpFromHeaders,
   hashPassword,
+  isSameOrigin,
   noteFailure,
   packToken,
   tooManyAttempts,
@@ -39,22 +41,27 @@ describe("passwords", () => {
 });
 
 describe("signed tokens", () => {
-  it("packs, unpacks, and rejects tampered, expired, or unversioned tokens", () => {
-    const token = packToken(42, 3, 60_000);
-    assert.deepEqual(unpackToken(token), { userId: 42, version: 3 });
+  it("separates session and pending token types and rejects tampered or expired tokens", () => {
+    const session = packToken("session", 42, 3, 60_000);
+    const pending = packToken("pending", 42, 0, 60_000);
 
-    const [body, sig] = token.split(".");
-    assert.equal(unpackToken(`${body}.${sig.slice(0, -1)}X`), null);
-    assert.equal(unpackToken(packToken(42, 3, -1000)), null);
+    assert.deepEqual(unpackToken(session, "session"), { userId: 42, version: 3 });
+    assert.deepEqual(unpackToken(pending, "pending"), { userId: 42, version: 0 });
+    assert.equal(unpackToken(pending, "session"), null);
+    assert.equal(unpackToken(session, "pending"), null);
 
-    const legacyBody = Buffer.from(JSON.stringify({ u: 42, exp: Date.now() + 60_000 })).toString("base64url");
-    assert.equal(unpackToken(`${legacyBody}.${sig}`), null);
+    const [body, sig] = session.split(".");
+    assert.equal(unpackToken(`${body}.${sig.slice(0, -1)}X`, "session"), null);
+    assert.equal(unpackToken(packToken("session", 42, 3, -1000), "session"), null);
+
+    const untypedBody = Buffer.from(JSON.stringify({ u: 42, v: 3, exp: Date.now() + 60_000 })).toString("base64url");
+    assert.equal(unpackToken(`${untypedBody}.${sig}`, "session"), null);
   });
 });
 
-describe("persistent rate limits", () => {
+describe("rate limits and proxy headers", () => {
   it("persists failed-attempt lockouts across database restarts", () => {
-    const key = "127.0.0.1|alice";
+    const key = "user|alice";
     assert.equal(tooManyAttempts(key), false);
     for (let i = 0; i < 4; i++) noteFailure(key);
     assert.equal(tooManyAttempts(key), false);
@@ -66,6 +73,39 @@ describe("persistent rate limits", () => {
 
     clearFailures(key);
     assert.equal(tooManyAttempts(key), false);
+  });
+
+  it("ignores forwarded IP headers unless OPENPANELX_TRUST_PROXY is enabled", () => {
+    const headers = new Headers({ "x-forwarded-for": "203.0.113.5, 10.0.0.1", "x-real-ip": "203.0.113.9" });
+    assert.equal(clientIpFromHeaders(headers, false), null);
+    assert.equal(clientIpFromHeaders(headers, true), "203.0.113.5");
+    assert.equal(clientIpFromHeaders(new Headers({ "x-real-ip": "198.51.100.2" }), true), "198.51.100.2");
+  });
+
+  it("enforces same-origin rules for cookie-authenticated mutations", () => {
+    const same = new Request("http://localhost:3100/api/plugins/notes/tables/0", {
+      method: "POST",
+      headers: { host: "localhost:3100", origin: "http://localhost:3100", "content-type": "application/json" },
+    });
+    assert.equal(isSameOrigin(same), true);
+
+    const evilOrigin = new Request("http://localhost:3100/api/plugins/notes/tables/0", {
+      method: "POST",
+      headers: { host: "localhost:3100", origin: "https://evil.example", "content-type": "application/json" },
+    });
+    assert.equal(isSameOrigin(evilOrigin), false);
+
+    const crossSiteFetch = new Request("http://localhost:3100/api/plugins/notes/tables/0", {
+      method: "POST",
+      headers: { host: "localhost:3100", "sec-fetch-site": "cross-site", "content-type": "application/json" },
+    });
+    assert.equal(isSameOrigin(crossSiteFetch), false);
+
+    const noHeadersForm = new Request("http://localhost:3100/api/plugins/notes/tables/0", {
+      method: "POST",
+      headers: { host: "localhost:3100", "content-type": "text/plain" },
+    });
+    assert.equal(isSameOrigin(noHeadersForm), false);
   });
 });
 
@@ -107,7 +147,7 @@ describe("plugins", () => {
     );
   });
 
-  it("persists editable table changes in dataDir without touching plugin files", () => {
+  it("persists atomic table mutations in dataDir without leaving tmp files or modifying plugin files", () => {
     const notes = getPlugin("notes");
     assert.ok(notes);
     const section = notes.sections[0];
@@ -125,5 +165,21 @@ describe("plugins", () => {
     assert.equal(reloaded.length, initial.length + 1);
     assert.equal(reloaded.at(-1)?.title, "Test");
     assert.equal(readFileSync(path.join(notes.dir, "data.json"), "utf8"), beforePluginFile);
+
+    const nextCount = mutateTableRows(notes, section, 0, (rows) => {
+      const next = [...rows, { _id: "atomic-row", title: "Atomic", owner: "qa", status: "Todo" }];
+      return { rows: next, result: next.length };
+    });
+    assert.equal(nextCount, initial.length + 2);
+
+    assert.throws(() => {
+      mutateTableRows(notes, section, 0, () => {
+        throw new Error("abort mutation");
+      });
+    }, /abort mutation/);
+    assert.equal(tableRows(notes, section, 0).length, initial.length + 2);
+
+    const files = readdirSync(path.join(tempDir, "plugins"));
+    assert.equal(files.some((f) => f.endsWith(".tmp")), false);
   });
 });

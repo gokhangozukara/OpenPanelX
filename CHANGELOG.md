@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.4.1
+
+### Security & Reliability
+- Separated session and 2FA pending tokens with an explicit `typ` field and domain-separated HMAC signing.
+- Hardened sign-in rate limiting against spoofed `x-forwarded-for` headers (per-username lockouts always enforced; proxy IP headers read only when `OPENPANELX_TRUST_PROXY=1`).
+- Made editable plugin table writes atomic (temp file + rename) and serialized via SQLite `BEGIN IMMEDIATE` transactions.
+- Added `Content-Security-Policy` and production `Strict-Transport-Security` (HSTS) headers.
+- Extracted testable API handlers (`src/lib/api-handlers.ts`) and added API authorization, CSRF, validation, and 404/409 tests plus an end-to-end HTTP smoke check (`npm run smoke`).
+
 ## v0.4.0
 
 ### Added

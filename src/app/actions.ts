@@ -21,7 +21,8 @@ import {
 } from "@/lib/auth";
 import { audit, db, type Role } from "@/lib/db";
 import { getT } from "@/lib/i18n";
-import { editableTable, getPlugin, MAX_CELL, MAX_ROWS, saveRows, tableRows, type Row } from "@/lib/plugins";
+import { editableTable, getPlugin, MAX_CELL, MAX_ROWS, mutateTableRows, type Row } from "@/lib/plugins";
+import { clientIpFromHeaders } from "@/lib/security";
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, open, seal } from "@/lib/totp";
 
 export type FormState = { error?: string; ok?: string; codes?: string[] } | undefined;
@@ -34,9 +35,10 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   const { t } = await getT();
   const username = str(form, "username");
   const password = String(form.get("password") ?? "");
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
-  const key = `${ip}|${username.toLowerCase()}`;
-  if (tooManyAttempts(key)) return { error: t("tooMany") };
+  const userKey = `user|${username.toLowerCase()}`;
+  const ip = clientIpFromHeaders(await headers());
+  const ipKey = ip ? `ip|${ip}` : null;
+  if (tooManyAttempts(userKey) || (ipKey && tooManyAttempts(ipKey, 20))) return { error: t("tooMany") };
 
   const row = db
     .prepare("SELECT id, password_hash, totp_enabled, session_version FROM users WHERE username = ? COLLATE NOCASE")
@@ -44,11 +46,12 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   // Hash even when the user does not exist so timing does not reveal which usernames are real.
   const ok = row ? verifyPassword(password, row.password_hash) : (verifyPassword(password, "scrypt$00$00"), false);
   if (!row || !ok) {
-    noteFailure(key);
+    noteFailure(userKey);
+    if (ipKey) noteFailure(ipKey);
     audit(null, "login.failed", username);
     return { error: t("invalid") };
   }
-  clearFailures(key);
+  clearFailures(userKey);
   if (row.totp_enabled) {
     // Right password, but the second step is still missing. No session yet.
     await startPending(row.id);
@@ -255,12 +258,15 @@ export async function addRow(pluginId: string, index: number, _: FormState, form
   for (const col of table.columns) row[col.key] = String(form.get(col.key) ?? "").trim().slice(0, MAX_CELL);
   if (table.columns.every((c) => row[c.key] === "")) return { error: t("rowEmpty") };
 
-  const rows = tableRows(plugin, table, index);
-  if (rows.length >= MAX_ROWS) return { error: t("rowLimit") };
-  saveRows(plugin, index, [...rows, row]);
-  audit(me.username, "row.add", plugin.id);
-  revalidatePath(`/plugins/${plugin.id}`);
-  return { ok: t("saved") };
+  const res = mutateTableRows<FormState>(plugin, table, index, (rows) => {
+    if (rows.length >= MAX_ROWS) return { result: { error: t("rowLimit") } };
+    return { rows: [...rows, row], result: { ok: t("saved") } };
+  });
+  if (res?.ok) {
+    audit(me.username, "row.add", plugin.id);
+    revalidatePath(`/plugins/${plugin.id}`);
+  }
+  return res;
 }
 
 export async function updateRow(pluginId: string, index: number, _: FormState, form: FormData): Promise<FormState> {
@@ -271,20 +277,22 @@ export async function updateRow(pluginId: string, index: number, _: FormState, f
   if (!plugin || !table || !hasRole(me, plugin.minRole)) return { error: t("invalid") };
 
   const rowId = String(form.get("rowId") ?? "");
-  const rows = tableRows(plugin, table, index);
-  const pos = rows.findIndex((r) => String(r._id ?? "") === rowId);
-  if (pos < 0) return { error: t("invalid") };
-
   const nextRow: Row = { _id: rowId };
   for (const col of table.columns) nextRow[col.key] = String(form.get(col.key) ?? "").trim().slice(0, MAX_CELL);
   if (table.columns.every((c) => nextRow[c.key] === "")) return { error: t("rowEmpty") };
 
-  const nextRows = [...rows];
-  nextRows[pos] = nextRow;
-  saveRows(plugin, index, nextRows);
-  audit(me.username, "row.update", plugin.id);
-  revalidatePath(`/plugins/${plugin.id}`);
-  return { ok: t("saved") };
+  const res = mutateTableRows<FormState>(plugin, table, index, (rows) => {
+    const pos = rows.findIndex((r) => String(r._id ?? "") === rowId);
+    if (pos < 0) return { result: { error: t("invalid") } };
+    const nextRows = [...rows];
+    nextRows[pos] = nextRow;
+    return { rows: nextRows, result: { ok: t("saved") } };
+  });
+  if (res?.ok) {
+    audit(me.username, "row.update", plugin.id);
+    revalidatePath(`/plugins/${plugin.id}`);
+  }
+  return res;
 }
 
 export async function deleteRow(pluginId: string, index: number, form: FormData) {
@@ -293,9 +301,15 @@ export async function deleteRow(pluginId: string, index: number, form: FormData)
   const table = editableTable(plugin, index);
   if (!plugin || !table || !hasRole(me, plugin.minRole)) return;
   const rowId = String(form.get("rowId") ?? "");
-  saveRows(plugin, index, tableRows(plugin, table, index).filter((r) => r._id !== rowId));
-  audit(me.username, "row.delete", plugin.id);
-  revalidatePath(`/plugins/${plugin.id}`);
+  const deleted = mutateTableRows<boolean>(plugin, table, index, (rows) => {
+    const filtered = rows.filter((r) => String(r._id ?? "") !== rowId);
+    if (filtered.length === rows.length) return { result: false };
+    return { rows: filtered, result: true };
+  });
+  if (deleted) {
+    audit(me.username, "row.delete", plugin.id);
+    revalidatePath(`/plugins/${plugin.id}`);
+  }
 }
 
 export async function setLanguage(form: FormData) {

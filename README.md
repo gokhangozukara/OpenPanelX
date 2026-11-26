@@ -93,10 +93,11 @@ All plugin endpoints require an active signed-in session cookie, and mutation en
 
 ## Security notes
 
-- Passwords are hashed with `scrypt`; session cookies are HMAC-SHA256 signed (`HttpOnly`, `SameSite=Lax`, 7-day expiry) and verified against `session_version` on every request.
+- Passwords are hashed with `scrypt`; session and 2FA pending cookies use separate `typ` claims with domain-separated HMAC-SHA256 signatures (`HttpOnly`, `SameSite=Lax`, 7-day session expiry) and are verified against `session_version` on every request.
 - Changing your password, changing a user's role, or resetting 2FA immediately invalidates older sessions for that account.
-- TOTP secrets are stored encrypted (AES-256-GCM) and failed login/2FA attempts are rate-limited in SQLite so lockouts persist across restarts.
-- Always run OpenPanelX behind HTTPS in production. See [SECURITY.md](SECURITY.md) for details.
+- TOTP secrets are stored encrypted (AES-256-GCM). Failed login/2FA attempts are rate-limited in SQLite across restarts, keyed by username (and client IP when `OPENPANELX_TRUST_PROXY=1` is set behind a trusted reverse proxy).
+- Editable plugin table updates are serialized and written atomically via temp-file rename so concurrent edits never corrupt data.
+- Responses include `Content-Security-Policy`, `Strict-Transport-Security` (in production HTTPS mode), `X-Frame-Options`, and `X-Content-Type-Options`. Always run OpenPanelX behind HTTPS in production. See [SECURITY.md](SECURITY.md) for details.
 
 ## License
 

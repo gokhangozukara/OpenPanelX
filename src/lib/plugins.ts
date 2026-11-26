@@ -1,8 +1,9 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Lang, Localized } from "./i18n";
-import { getDataDir, type Role } from "./db";
+import { db, getDataDir, type Role } from "./db";
 
 /** A cell is plain text, a number, or text per language: { "en": "", "tr": "", "de": "" }. */
 export type Cell = string | number | Partial<Record<Lang, string>>;
@@ -97,8 +98,41 @@ export function tableRows(plugin: Plugin, s: TableSection, index: number): Row[]
 }
 
 export function saveRows(plugin: Plugin, index: number, rows: Row[]) {
-  mkdirSync(path.join(getDataDir(), "plugins"), { recursive: true });
-  writeFileSync(storeFile(plugin, index), JSON.stringify(rows, null, 2));
+  const dir = path.join(getDataDir(), "plugins");
+  mkdirSync(dir, { recursive: true });
+  const target = storeFile(plugin, index);
+  const tmp = path.join(dir, `.${plugin.id}-${index}.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    writeFileSync(tmp, JSON.stringify(rows, null, 2), "utf8");
+    renameSync(tmp, target);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {}
+    throw err;
+  }
+}
+
+/** Serializes concurrent read-modify-write operations on an editable plugin table using SQLite's write lock. */
+export function mutateTableRows<T>(
+  plugin: Plugin,
+  section: TableSection,
+  index: number,
+  mutator: (rows: Row[]) => { rows?: Row[]; result: T },
+): T {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const current = tableRows(plugin, section, index);
+    const { rows, result } = mutator(current);
+    if (rows) saveRows(plugin, index, rows);
+    db.exec("COMMIT");
+    return result;
+  } catch (err) {
+    try {
+      db.exec("ROLLBACK");
+    } catch {}
+    throw err;
+  }
 }
 
 // Short unit names per language: day, hour, minute.

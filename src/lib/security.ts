@@ -1,10 +1,14 @@
 import { createHmac, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { db, getDataDir } from "./db";
+import { db, getDataDir, type Role, type UserRow } from "./db";
 
 const RATE_LIMIT_WINDOW_MS = 15 * 60_000;
 const RATE_LIMIT_MAX = 5;
+
+export type TokenType = "session" | "pending";
+export const RANK: Record<Role, number> = { viewer: 0, editor: 1, admin: 2 };
+export const hasRole = (user: Pick<UserRow, "role">, min: Role) => RANK[user.role] >= RANK[min];
 
 export function appSecret(): string {
   if (process.env.OPENPANELX_SECRET) return process.env.OPENPANELX_SECRET;
@@ -28,23 +32,30 @@ export function verifyPassword(pw: string, stored: string): boolean {
   return timingSafeEqual(actual, expected);
 }
 
-const sign = (body: string) => createHmac("sha256", appSecret()).update(body).digest("base64url");
+const sign = (typ: TokenType, body: string) =>
+  createHmac("sha256", appSecret()).update(`${typ}.${body}`).digest("base64url");
 
-export function packToken(userId: number, version: number, ttlMs: number): string {
-  const body = Buffer.from(JSON.stringify({ u: userId, v: version, exp: Date.now() + ttlMs })).toString("base64url");
-  return `${body}.${sign(body)}`;
+export function packToken(typ: TokenType, userId: number, version: number, ttlMs: number): string {
+  const body = Buffer.from(JSON.stringify({ typ, u: userId, v: version, exp: Date.now() + ttlMs })).toString("base64url");
+  return `${body}.${sign(typ, body)}`;
 }
 
-export function unpackToken(raw: string | undefined): { userId: number; version: number } | null {
+export function unpackToken(raw: string | undefined, expectedType: TokenType): { userId: number; version: number } | null {
   if (!raw) return null;
   const [body, sig] = raw.split(".");
   if (!body || !sig) return null;
-  const good = Buffer.from(sign(body));
+  const good = Buffer.from(sign(expectedType, body));
   const given = Buffer.from(sig);
   if (good.length !== given.length || !timingSafeEqual(good, given)) return null;
   try {
-    const parsed = JSON.parse(Buffer.from(body, "base64url").toString()) as { u?: unknown; v?: unknown; exp?: unknown };
+    const parsed = JSON.parse(Buffer.from(body, "base64url").toString()) as {
+      typ?: unknown;
+      u?: unknown;
+      v?: unknown;
+      exp?: unknown;
+    };
     if (
+      parsed.typ === expectedType &&
       typeof parsed.u === "number" &&
       typeof parsed.v === "number" &&
       typeof parsed.exp === "number" &&
@@ -58,14 +69,26 @@ export function unpackToken(raw: string | undefined): { userId: number; version:
   }
 }
 
-/** Persistent SQLite brake against password/2FA guessing: 5 failures per 15 minutes per key. */
-export function tooManyAttempts(key: string): boolean {
+/** Reads client IP from proxy headers only when OPENPANELX_TRUST_PROXY=1 is explicitly set. */
+export function clientIpFromHeaders(
+  h: Pick<Headers, "get">,
+  trustProxy = process.env.OPENPANELX_TRUST_PROXY === "1",
+): string | null {
+  if (!trustProxy) return null;
+  const forwarded = h.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (forwarded) return forwarded;
+  const realIp = h.get("x-real-ip")?.trim();
+  return realIp || null;
+}
+
+/** Persistent SQLite brake against password/2FA guessing: `maxAttempts` failures per 15 minutes per key. */
+export function tooManyAttempts(key: string, maxAttempts = RATE_LIMIT_MAX): boolean {
   const now = Date.now();
   db.prepare("DELETE FROM rate_limits WHERE until <= ?").run(now);
   const row = db.prepare("SELECT count, until FROM rate_limits WHERE key = ?").get(key) as
     | { count: number; until: number }
     | undefined;
-  return !!row && row.until > now && row.count >= RATE_LIMIT_MAX;
+  return !!row && row.until > now && row.count >= maxAttempts;
 }
 
 export function noteFailure(key: string): void {

@@ -1,6 +1,6 @@
 {
   "name": "openpanelx",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "Minimal, plugin-ready admin panel with sign-in and roles built in.",
   "license": "MIT",
@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start -p 3100",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test tests/*.test.ts"
+    "test": "tsx --test tests/*.test.ts",
+    "smoke": "node scripts/smoke.mjs"
   },
   "engines": {
     "node": ">=24"

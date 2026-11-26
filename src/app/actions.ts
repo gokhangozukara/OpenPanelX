@@ -22,7 +22,7 @@ import {
 import { audit, db, type Role } from "@/lib/db";
 import { getT } from "@/lib/i18n";
 import { editableTable, getPlugin, MAX_CELL, MAX_ROWS, mutateTableRows, type Row } from "@/lib/plugins";
-import { clientIpFromHeaders } from "@/lib/security";
+import { accountBackoffMs, clientIpFromHeaders } from "@/lib/security";
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, open, seal } from "@/lib/totp";
 
 export type FormState = { error?: string; ok?: string; codes?: string[] } | undefined;
@@ -37,8 +37,14 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   const password = String(form.get("password") ?? "");
   const userKey = `user|${username.toLowerCase()}`;
   const ip = clientIpFromHeaders(await headers());
+  const ipUserKey = ip ? `ipuser|${ip}|${username.toLowerCase()}` : null;
   const ipKey = ip ? `ip|${ip}` : null;
-  if (tooManyAttempts(userKey) || (ipKey && tooManyAttempts(ipKey, 20))) return { error: t("tooMany") };
+  if ((ipUserKey && tooManyAttempts(ipUserKey, 5)) || (ipKey && tooManyAttempts(ipKey, 20))) {
+    return { error: t("tooMany") };
+  }
+
+  const delay = accountBackoffMs(userKey);
+  if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
 
   const row = db
     .prepare("SELECT id, password_hash, totp_enabled, session_version FROM users WHERE username = ? COLLATE NOCASE")
@@ -47,11 +53,13 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   const ok = row ? verifyPassword(password, row.password_hash) : (verifyPassword(password, "scrypt$00$00"), false);
   if (!row || !ok) {
     noteFailure(userKey);
+    if (ipUserKey) noteFailure(ipUserKey);
     if (ipKey) noteFailure(ipKey);
     audit(null, "login.failed", username);
     return { error: t("invalid") };
   }
   clearFailures(userKey);
+  if (ipUserKey) clearFailures(ipUserKey);
   if (row.totp_enabled) {
     // Right password, but the second step is still missing. No session yet.
     await startPending(row.id);

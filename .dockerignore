@@ -8,3 +8,5 @@ data
 !.env.example
 docs/screenshots
 tests
+test-results
+playwright-report

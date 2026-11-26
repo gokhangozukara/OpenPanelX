@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.2
+
+### Security & Testing
+- Separated sign-in throttling into IP-scoped lockouts (when `OPENPANELX_TRUST_PROXY=1`) plus bounded per-account progressive backoff, preventing remote attackers from locking out admin accounts.
+- Switched to per-request nonce-based `Content-Security-Policy` via `src/proxy.ts` (`'strict-dynamic'`, removing `'unsafe-inline'` from `script-src`) with nonce propagation to the pre-paint theme script.
+- Added automated Playwright browser E2E tests (`npm run test:e2e`) covering setup, dark theme persistence under nonce CSP, search, inline row editing, CSV export with formula escaping, deletion, and user role updates.
+
 ## v0.4.1
 
 ### Security & Reliability

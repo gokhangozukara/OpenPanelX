@@ -6,6 +6,7 @@ import { after, before, describe, it } from "node:test";
 import { resetDbForTests } from "../src/lib/db";
 import { getPlugin, listPlugins, mutateTableRows, saveRows, seedRows, tableRows } from "../src/lib/plugins";
 import {
+  accountBackoffMs,
   clearFailures,
   clientIpFromHeaders,
   hashPassword,
@@ -73,6 +74,37 @@ describe("rate limits and proxy headers", () => {
 
     clearFailures(key);
     assert.equal(tooManyAttempts(key), false);
+  });
+
+  it("isolates IP-user lockouts and applies bounded progressive backoff per account", () => {
+    const attackerKey = "ipuser|203.0.113.5|admin";
+    const realAdminKey = "ipuser|198.51.100.10|admin";
+    const accountKey = "user|admin";
+
+    for (let i = 0; i < 5; i++) noteFailure(attackerKey);
+    assert.equal(tooManyAttempts(attackerKey, 5), true);
+    assert.equal(tooManyAttempts(realAdminKey, 5), false);
+
+    assert.equal(accountBackoffMs(accountKey), 0);
+    noteFailure(accountKey);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 0);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 250);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 500);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 1000);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 2000);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 3000);
+    noteFailure(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 3000);
+
+    clearFailures(accountKey);
+    assert.equal(accountBackoffMs(accountKey), 0);
+    clearFailures(attackerKey);
   });
 
   it("ignores forwarded IP headers unless OPENPANELX_TRUST_PROXY is enabled", () => {

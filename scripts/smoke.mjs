@@ -43,17 +43,37 @@ async function waitForHealth(timeoutMs = 15_000) {
   throw new Error(`Timed out waiting for ${baseUrl}/api/health\n${logs}`);
 }
 
+function extractScriptNonce(csp) {
+  const scriptSrc = csp
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith("script-src "));
+  assert.ok(scriptSrc, `Missing script-src directive in CSP: ${csp}`);
+  assert.equal(scriptSrc.includes("'unsafe-inline'"), false, `script-src must not allow unsafe-inline: ${scriptSrc}`);
+  assert.ok(scriptSrc.includes("'strict-dynamic'"), `script-src must include strict-dynamic: ${scriptSrc}`);
+  const match = scriptSrc.match(/'nonce-([^']+)'/);
+  assert.ok(match && match[1], `Missing nonce in script-src: ${scriptSrc}`);
+  return match[1];
+}
+
 try {
   const healthRes = await waitForHealth();
   assert.equal(healthRes.status, 200);
   const health = await healthRes.json();
   assert.equal(health.ok, true);
   assert.equal(health.name, "OpenPanelX");
-  assert.equal(health.version, "0.4.1");
+  assert.equal(health.version, "0.4.2");
 
-  const csp = healthRes.headers.get("content-security-policy") ?? "";
-  assert.ok(csp.includes("default-src 'self'"), `Missing CSP header: ${csp}`);
-  assert.ok(csp.includes("frame-ancestors 'none'"), `Missing frame-ancestors in CSP: ${csp}`);
+  const csp1 = healthRes.headers.get("content-security-policy") ?? "";
+  assert.ok(csp1.includes("default-src 'self'"), `Missing CSP header: ${csp1}`);
+  assert.ok(csp1.includes("frame-ancestors 'none'"), `Missing frame-ancestors in CSP: ${csp1}`);
+  const nonce1 = extractScriptNonce(csp1);
+
+  const healthRes2 = await fetch(`${baseUrl}/api/health`);
+  assert.equal(healthRes2.status, 200);
+  const nonce2 = extractScriptNonce(healthRes2.headers.get("content-security-policy") ?? "");
+  assert.notEqual(nonce1, nonce2, "CSP nonce must rotate on every request");
+
   const hsts = healthRes.headers.get("strict-transport-security") ?? "";
   assert.ok(hsts.includes("max-age=31536000"), `Missing HSTS header: ${hsts}`);
   assert.equal(healthRes.headers.get("x-frame-options"), "DENY");

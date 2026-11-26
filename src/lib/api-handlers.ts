@@ -47,7 +47,7 @@ export function handleHealth(): Response {
     {
       ok: true,
       name: "OpenPanelX",
-      version: "0.4.1",
+      version: "0.4.2",
       uptime: Math.floor(process.uptime()),
     },
     { headers: { "Cache-Control": "no-store" } },

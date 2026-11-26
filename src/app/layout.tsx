@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { getLang } from "@/lib/i18n";
 import "./globals.css";
 
@@ -17,10 +18,11 @@ const THEME_SCRIPT = `try{var t=localStorage.getItem("opx_theme");if(t==="light"
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const lang = await getLang();
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html lang={lang} suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_SCRIPT }} />
       </head>
       <body>{children}</body>
     </html>

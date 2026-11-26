@@ -82,13 +82,24 @@ export function clientIpFromHeaders(
 }
 
 /** Persistent SQLite brake against password/2FA guessing: `maxAttempts` failures per 15 minutes per key. */
-export function tooManyAttempts(key: string, maxAttempts = RATE_LIMIT_MAX): boolean {
+export function getFailureCount(key: string): number {
   const now = Date.now();
   db.prepare("DELETE FROM rate_limits WHERE until <= ?").run(now);
   const row = db.prepare("SELECT count, until FROM rate_limits WHERE key = ?").get(key) as
     | { count: number; until: number }
     | undefined;
-  return !!row && row.until > now && row.count >= maxAttempts;
+  return row && row.until > now ? row.count : 0;
+}
+
+export function tooManyAttempts(key: string, maxAttempts = RATE_LIMIT_MAX): boolean {
+  return getFailureCount(key) >= maxAttempts;
+}
+
+/** Bounded progressive backoff per account so remote attackers cannot hard-lock legitimate admins out. */
+export function accountBackoffMs(key: string): number {
+  const count = getFailureCount(key);
+  if (count < 3) return 0;
+  return Math.min(3000, 250 * 2 ** (count - 3));
 }
 
 export function noteFailure(key: string): void {

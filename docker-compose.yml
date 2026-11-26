@@ -1,0 +1,17 @@
+services:
+  openpanelx:
+    build: .
+    ports:
+      - "3100:3100"
+    volumes:
+      - openpanelx_data:/app/data
+      # Mount your own plugins folder if needed:
+      # - ./plugins:/app/plugins:ro
+    environment:
+      # Set OPENPANELX_INSECURE=1 only for local plain-HTTP testing on a LAN IP.
+      # Behind HTTPS (recommended), remove or keep unset.
+      OPENPANELX_INSECURE: ${OPENPANELX_INSECURE:-0}
+    restart: unless-stopped
+
+volumes:
+  openpanelx_data:

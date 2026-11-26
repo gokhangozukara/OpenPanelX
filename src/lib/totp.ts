@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import { appSecret } from "./auth";
+import { appSecret } from "./security";
 
 /** Standard time-based one-time passwords (RFC 6238): 6 digits, 30 seconds, SHA-1. Works with any authenticator app. */
 
@@ -47,6 +47,10 @@ function code(secret: string, step: number): string {
   const o = h[h.length - 1] & 15;
   const n = ((h[o] & 0x7f) << 24) | (h[o + 1] << 16) | (h[o + 2] << 8) | h[o + 3];
   return String(n % 1_000_000).padStart(6, "0");
+}
+
+export function generateTotp(secret: string, nowMs = Date.now()): string {
+  return code(secret, Math.floor(nowMs / 30_000));
 }
 
 /**

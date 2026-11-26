@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import os from "node:os";
 import path from "node:path";
 import type { Lang, Localized } from "./i18n";
-import { dataDir, type Role } from "./db";
+import { getDataDir, type Role } from "./db";
 
 /** A cell is plain text, a number, or text per language: { "en": "", "tr": "", "de": "" }. */
 export type Cell = string | number | Partial<Record<Lang, string>>;
@@ -26,6 +26,9 @@ export type Plugin = {
   sections: Section[];
   dir: string;
 };
+
+export const MAX_ROWS = 1000;
+export const MAX_CELL = 500;
 
 const ROOT = path.join(process.cwd(), "plugins");
 const ID = /^[a-z0-9][a-z0-9-]{0,40}$/;
@@ -57,10 +60,15 @@ export function listPlugins(): Plugin[] {
 
 export const getPlugin = (id: string) => (ID.test(id) ? listPlugins().find((p) => p.id === id) : undefined);
 
-type TableSection = Extract<Section, { type: "table" }>;
+export type TableSection = Extract<Section, { type: "table" }>;
+
+export function editableTable(plugin: Plugin | undefined, index: number): TableSection | null {
+  const s = plugin?.sections[index];
+  return s && s.type === "table" && s.editable ? s : null;
+}
 
 /** The starting rows of a table: inline rows, or a JSON file that must live inside the plugin folder. */
-function seedRows(plugin: Plugin, s: TableSection): Row[] {
+export function seedRows(plugin: Plugin, s: TableSection): Row[] {
   if (s.rows) return s.rows;
   if (!s.file) return [];
   const file = path.resolve(plugin.dir, s.file);
@@ -75,7 +83,7 @@ function seedRows(plugin: Plugin, s: TableSection): Row[] {
 
 // Edits never touch the plugin folder. They are stored in the data folder, so a plugin
 // can be updated or replaced without losing what people entered.
-const storeFile = (plugin: Plugin, index: number) => path.join(dataDir, "plugins", `${plugin.id}-${index}.json`);
+const storeFile = (plugin: Plugin, index: number) => path.join(getDataDir(), "plugins", `${plugin.id}-${index}.json`);
 
 export function tableRows(plugin: Plugin, s: TableSection, index: number): Row[] {
   if (!s.editable) return seedRows(plugin, s);
@@ -89,7 +97,7 @@ export function tableRows(plugin: Plugin, s: TableSection, index: number): Row[]
 }
 
 export function saveRows(plugin: Plugin, index: number, rows: Row[]) {
-  mkdirSync(path.join(dataDir, "plugins"), { recursive: true });
+  mkdirSync(path.join(getDataDir(), "plugins"), { recursive: true });
   writeFileSync(storeFile(plugin, index), JSON.stringify(rows, null, 2));
 }
 

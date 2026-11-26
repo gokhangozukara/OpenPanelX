@@ -1,10 +1,9 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { headers } from "next/headers";
+import { redirect } from "next/navigation";
 import {
   clearFailures,
   clearPending,
@@ -22,7 +21,7 @@ import {
 } from "@/lib/auth";
 import { audit, db, type Role } from "@/lib/db";
 import { getT } from "@/lib/i18n";
-import { getPlugin, saveRows, tableRows, type Row } from "@/lib/plugins";
+import { editableTable, getPlugin, MAX_CELL, MAX_ROWS, saveRows, tableRows, type Row } from "@/lib/plugins";
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, open, seal } from "@/lib/totp";
 
 export type FormState = { error?: string; ok?: string; codes?: string[] } | undefined;
@@ -40,8 +39,8 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
   if (tooManyAttempts(key)) return { error: t("tooMany") };
 
   const row = db
-    .prepare("SELECT id, password_hash, totp_enabled FROM users WHERE username = ? COLLATE NOCASE")
-    .get(username) as { id: number; password_hash: string; totp_enabled: number } | undefined;
+    .prepare("SELECT id, password_hash, totp_enabled, session_version FROM users WHERE username = ? COLLATE NOCASE")
+    .get(username) as { id: number; password_hash: string; totp_enabled: number; session_version: number } | undefined;
   // Hash even when the user does not exist so timing does not reveal which usernames are real.
   const ok = row ? verifyPassword(password, row.password_hash) : (verifyPassword(password, "scrypt$00$00"), false);
   if (!row || !ok) {
@@ -55,7 +54,7 @@ export async function signIn(_: FormState, form: FormData): Promise<FormState> {
     await startPending(row.id);
     redirect("/login/verify");
   }
-  await startSession(row.id);
+  await startSession(row.id, row.session_version);
   audit(username, "login");
   redirect("/");
 }
@@ -67,8 +66,10 @@ export async function verifyLogin(_: FormState, form: FormData): Promise<FormSta
   const key = `2fa|${id}`;
   if (tooManyAttempts(key)) return { error: t("tooMany") };
 
-  const user = db.prepare("SELECT id, username, totp_secret, totp_step FROM users WHERE id = ? AND totp_enabled = 1").get(id) as
-    | { id: number; username: string; totp_secret: string; totp_step: number }
+  const user = db
+    .prepare("SELECT id, username, totp_secret, totp_step, session_version FROM users WHERE id = ? AND totp_enabled = 1")
+    .get(id) as
+    | { id: number; username: string; totp_secret: string; totp_step: number; session_version: number }
     | undefined;
   if (!user) redirect("/login");
 
@@ -92,7 +93,7 @@ export async function verifyLogin(_: FormState, form: FormData): Promise<FormSta
   }
   clearFailures(key);
   await clearPending();
-  await startSession(user.id);
+  await startSession(user.id, user.session_version);
   audit(user.username, "login");
   redirect("/");
 }
@@ -141,13 +142,13 @@ export async function disableTotp(_: FormState, form: FormData): Promise<FormSta
   return { ok: t("saved") };
 }
 
-/** Admin help for someone who lost their phone and recovery codes. */
+/** Admin help for someone who lost their phone and recovery codes. Also invalidates their sessions. */
 export async function resetUserTotp(form: FormData) {
   const me = await requireUser("admin");
   const id = Number(form.get("id"));
   const target = db.prepare("SELECT username FROM users WHERE id = ?").get(id) as { username: string } | undefined;
   if (!target || id === me.id) return;
-  db.prepare("UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_step = 0 WHERE id = ?").run(id);
+  db.prepare("UPDATE users SET totp_enabled = 0, totp_secret = NULL, totp_step = 0, session_version = session_version + 1 WHERE id = ?").run(id);
   db.prepare("DELETE FROM recovery_codes WHERE user_id = ?").run(id);
   audit(me.username, "2fa.reset", target.username);
   revalidatePath("/users");
@@ -163,7 +164,7 @@ export async function setupAdmin(_: FormState, form: FormData): Promise<FormStat
   const res = db
     .prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')")
     .run(username, hashPassword(password));
-  await startSession(Number(res.lastInsertRowid));
+  await startSession(Number(res.lastInsertRowid), 1);
   audit(username, "setup", "first admin created");
   redirect("/");
 }
@@ -192,6 +193,24 @@ export async function addUser(_: FormState, form: FormData): Promise<FormState> 
   return { ok: t("saved") };
 }
 
+export async function updateUserRole(form: FormData) {
+  const me = await requireUser("admin");
+  const id = Number(form.get("id"));
+  const role = str(form, "role");
+  if (!isRole(role)) return;
+  const target = db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(id) as
+    | { id: number; username: string; role: Role }
+    | undefined;
+  if (!target || target.id === me.id || target.role === role) return;
+  if (target.role === "admin" && role !== "admin") {
+    const admins = (db.prepare("SELECT COUNT(*) AS n FROM users WHERE role = 'admin'").get() as { n: number }).n;
+    if (admins <= 1) return;
+  }
+  db.prepare("UPDATE users SET role = ?, session_version = session_version + 1 WHERE id = ?").run(role, id);
+  audit(me.username, "user.role", `${target.username} (${role})`);
+  revalidatePath("/users");
+}
+
 export async function deleteUser(form: FormData) {
   const me = await requireUser("admin");
   const id = Number(form.get("id"));
@@ -216,17 +235,13 @@ export async function changePassword(_: FormState, form: FormData): Promise<Form
   const row = db.prepare("SELECT password_hash FROM users WHERE id = ?").get(me.id) as { password_hash: string };
   if (!verifyPassword(current, row.password_hash)) return { error: t("pwWrong") };
   if (next.length < 8) return { error: t("pwShort") };
-  db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(next), me.id);
+  db.prepare("UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?").run(
+    hashPassword(next),
+    me.id,
+  );
+  await startSession(me.id);
   audit(me.username, "password.change");
   return { ok: t("saved") };
-}
-
-const MAX_ROWS = 1000;
-const MAX_CELL = 500;
-
-function editableTable(plugin: ReturnType<typeof getPlugin>, index: number) {
-  const s = plugin?.sections[index];
-  return s && s.type === "table" && s.editable ? s : null;
 }
 
 export async function addRow(pluginId: string, index: number, _: FormState, form: FormData): Promise<FormState> {
@@ -244,6 +259,30 @@ export async function addRow(pluginId: string, index: number, _: FormState, form
   if (rows.length >= MAX_ROWS) return { error: t("rowLimit") };
   saveRows(plugin, index, [...rows, row]);
   audit(me.username, "row.add", plugin.id);
+  revalidatePath(`/plugins/${plugin.id}`);
+  return { ok: t("saved") };
+}
+
+export async function updateRow(pluginId: string, index: number, _: FormState, form: FormData): Promise<FormState> {
+  const me = await requireUser("editor");
+  const { t } = await getT();
+  const plugin = getPlugin(pluginId);
+  const table = editableTable(plugin, index);
+  if (!plugin || !table || !hasRole(me, plugin.minRole)) return { error: t("invalid") };
+
+  const rowId = String(form.get("rowId") ?? "");
+  const rows = tableRows(plugin, table, index);
+  const pos = rows.findIndex((r) => String(r._id ?? "") === rowId);
+  if (pos < 0) return { error: t("invalid") };
+
+  const nextRow: Row = { _id: rowId };
+  for (const col of table.columns) nextRow[col.key] = String(form.get(col.key) ?? "").trim().slice(0, MAX_CELL);
+  if (table.columns.every((c) => nextRow[c.key] === "")) return { error: t("rowEmpty") };
+
+  const nextRows = [...rows];
+  nextRows[pos] = nextRow;
+  saveRows(plugin, index, nextRows);
+  audit(me.username, "row.update", plugin.id);
   revalidatePath(`/plugins/${plugin.id}`);
   return { ok: t("saved") };
 }

@@ -2,15 +2,18 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 
-export const dataDir = process.env.OPENPANELX_DATA ?? path.join(process.cwd(), "data");
+export function getDataDir(): string {
+  return process.env.OPENPANELX_DATA ?? path.join(process.cwd(), "data");
+}
 
 declare global {
   var __opxDb: DatabaseSync | undefined;
 }
 
 function open() {
-  mkdirSync(dataDir, { recursive: true });
-  const d = new DatabaseSync(path.join(dataDir, "panel.db"));
+  const dir = getDataDir();
+  mkdirSync(dir, { recursive: true });
+  const d = new DatabaseSync(path.join(dir, "panel.db"));
   d.exec(`
     PRAGMA busy_timeout = 10000;
     PRAGMA journal_mode = WAL;
@@ -34,8 +37,13 @@ function open() {
       code_hash TEXT NOT NULL,
       used INTEGER NOT NULL DEFAULT 0
     );
+    CREATE TABLE IF NOT EXISTS rate_limits (
+      key TEXT PRIMARY KEY,
+      count INTEGER NOT NULL,
+      until INTEGER NOT NULL
+    );
   `);
-  // Two-step sign-in columns, added in place so existing installs keep their users.
+  // Two-step sign-in and session version columns, added in place so existing installs keep their users.
   const cols = (d.prepare("PRAGMA table_info(users)").all() as { name: string }[]).map((c) => c.name);
   if (!cols.includes("totp_secret")) {
     d.exec(`
@@ -43,6 +51,9 @@ function open() {
       ALTER TABLE users ADD COLUMN totp_enabled INTEGER NOT NULL DEFAULT 0;
       ALTER TABLE users ADD COLUMN totp_step INTEGER NOT NULL DEFAULT 0;
     `);
+  }
+  if (!cols.includes("session_version")) {
+    d.exec("ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 1;");
   }
   d.exec("PRAGMA foreign_keys = ON;");
   return d;
@@ -57,8 +68,22 @@ export const db: DatabaseSync = new Proxy({} as DatabaseSync, {
   },
 });
 
+export function resetDbForTests() {
+  if (globalThis.__opxDb) {
+    globalThis.__opxDb.close();
+    globalThis.__opxDb = undefined;
+  }
+}
+
 export type Role = "admin" | "editor" | "viewer";
-export type UserRow = { id: number; username: string; role: Role; created_at: string; totp_enabled: number };
+export type UserRow = {
+  id: number;
+  username: string;
+  role: Role;
+  created_at: string;
+  totp_enabled: number;
+  session_version: number;
+};
 
 export function audit(actor: string | null, action: string, detail = "") {
   db.prepare("INSERT INTO audit (actor, action, detail) VALUES (?, ?, ?)").run(actor, action, detail);

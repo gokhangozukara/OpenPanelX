@@ -1,13 +1,15 @@
 {
   "name": "openpanelx",
-  "version": "0.1.0",
+  "version": "0.4.0",
   "private": true,
   "description": "Minimal, plugin-ready admin panel with sign-in and roles built in.",
   "license": "MIT",
   "scripts": {
     "dev": "next dev -p 3100",
     "build": "next build",
-    "start": "next start -p 3100"
+    "start": "next start -p 3100",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test tests/*.test.ts"
   },
   "engines": {
     "node": ">=24"
@@ -26,6 +28,7 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "tailwindcss": "^4.3.5",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   }
 }

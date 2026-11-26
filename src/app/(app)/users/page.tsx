@@ -2,7 +2,7 @@ import { ActionForm, Field } from "@/components/forms";
 import { requireUser } from "@/lib/auth";
 import { db, type UserRow } from "@/lib/db";
 import { getT } from "@/lib/i18n";
-import { addUser, deleteUser, resetUserTotp } from "../../actions";
+import { addUser, deleteUser, resetUserTotp, updateUserRole } from "../../actions";
 
 export async function generateMetadata() {
   const { t } = await getT();
@@ -43,7 +43,23 @@ export default async function UsersPage() {
                   <td className="px-5 py-3 text-muted tabular-nums">{u.created_at.slice(0, 10)}</td>
                   <td className="px-5 py-3">
                     {u.id !== me.id && (
-                      <div className="flex justify-end gap-4">
+                      <div className="flex flex-wrap items-center justify-end gap-3">
+                        <form action={updateUserRole} className="inline-flex items-center gap-1.5">
+                          <input type="hidden" name="id" value={u.id} />
+                          <select
+                            name="role"
+                            defaultValue={u.role}
+                            aria-label={`${t("changeRole")}: ${u.username}`}
+                            className="h-8 rounded-md border border-line bg-surface px-2 text-xs text-fg outline-none focus:border-fg"
+                          >
+                            <option value="viewer">{t("viewer")}</option>
+                            <option value="editor">{t("editor")}</option>
+                            <option value="admin">{t("admin")}</option>
+                          </select>
+                          <button className="cursor-pointer rounded-md border border-line px-2 py-1 text-xs text-muted transition hover:bg-soft hover:text-fg">
+                            {t("save")}
+                          </button>
+                        </form>
                         {u.totp_enabled ? (
                           <form action={resetUserTotp}>
                             <input type="hidden" name="id" value={u.id} />

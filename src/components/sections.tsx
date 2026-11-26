@@ -1,8 +1,8 @@
-import { addRow, deleteRow } from "@/app/actions";
+import { addRow, deleteRow, updateRow } from "@/app/actions";
 import type { Lang, T } from "@/lib/i18n";
 import { pick } from "@/lib/i18n";
 import { systemValue, tableRows, type Cell, type Plugin, type Section } from "@/lib/plugins";
-import { ActionForm } from "./forms";
+import { PluginTable } from "./plugin-table";
 
 function cellText(value: Cell | undefined, lang: Lang): string {
   if (value && typeof value === "object") return pick(value, lang);
@@ -28,68 +28,35 @@ export function Sections({ plugin, lang, t, canEdit }: { plugin: Plugin; lang: L
           );
         }
         if (s.type === "table") {
-          const rows = tableRows(plugin, s, i);
-          const editing = canEdit && s.editable;
+          const rows = tableRows(plugin, s, i).map((row, r) => ({
+            id: String(row._id ?? r),
+            cells: Object.fromEntries(s.columns.map((c) => [c.key, cellText(row[c.key], lang)])),
+          }));
+          const columns = s.columns.map((c) => ({ key: c.key, label: pick(c.label, lang) }));
           return (
-            <section key={i} className="card overflow-hidden">
-              {s.title && <h2 className="border-b border-line px-5 py-3.5 text-sm font-medium">{pick(s.title, lang)}</h2>}
-              {rows.length === 0 ? (
-                <p className="px-5 py-8 text-center text-sm text-muted">{t("empty")}</p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-line text-xs text-muted">
-                        {s.columns.map((c) => (
-                          <th key={c.key} className="px-5 py-2.5 font-medium whitespace-nowrap">
-                            {pick(c.label, lang)}
-                          </th>
-                        ))}
-                        {editing && <th className="px-5 py-2.5" />}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, r) => (
-                        <tr key={String(row._id ?? r)} className="border-b border-line last:border-0">
-                          {s.columns.map((c) => (
-                            <td key={c.key} className="px-5 py-3">
-                              {cellText(row[c.key], lang)}
-                            </td>
-                          ))}
-                          {editing && (
-                            <td className="px-5 py-3 text-right">
-                              <form action={deleteRow.bind(null, plugin.id, i)}>
-                                <input type="hidden" name="rowId" value={String(row._id)} />
-                                <button className="cursor-pointer text-sm text-danger hover:underline">{t("delete")}</button>
-                              </form>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              {editing && (
-                <div className="border-t border-line bg-soft/40 p-5">
-                  <ActionForm
-                    action={addRow.bind(null, plugin.id, i)}
-                    submit={t("addRow")}
-                    resetOnOk
-                    className="grid gap-3 sm:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] sm:items-end"
-                  >
-                    {s.columns.map((c) => (
-                      <div key={c.key}>
-                        <label className="label" htmlFor={`${i}-${c.key}`}>
-                          {pick(c.label, lang)}
-                        </label>
-                        <input className="input" id={`${i}-${c.key}`} name={c.key} maxLength={500} autoComplete="off" />
-                      </div>
-                    ))}
-                  </ActionForm>
-                </div>
-              )}
-            </section>
+            <PluginTable
+              key={i}
+              pluginId={plugin.id}
+              sectionIndex={i}
+              title={s.title ? pick(s.title, lang) : undefined}
+              columns={columns}
+              rows={rows}
+              editable={Boolean(canEdit && s.editable)}
+              labels={{
+                empty: t("empty"),
+                noMatches: t("noMatches"),
+                search: t("search"),
+                exportCsv: t("exportCsv"),
+                addRow: t("addRow"),
+                edit: t("edit"),
+                save: t("save"),
+                cancel: t("cancel"),
+                delete: t("delete"),
+              }}
+              addAction={addRow.bind(null, plugin.id, i)}
+              updateAction={updateRow.bind(null, plugin.id, i)}
+              deleteAction={deleteRow.bind(null, plugin.id, i)}
+            />
           );
         }
         return (

@@ -22,11 +22,13 @@ const ACTIONS: Record<string, Parameters<T>[0]> = {
   setup: "actSetup",
   "user.add": "actUserAdd",
   "user.delete": "actUserDelete",
+  "user.role": "actUserRole",
   "password.change": "actPasswordChange",
   "2fa.enable": "act2faEnable",
   "2fa.disable": "act2faDisable",
   "2fa.reset": "act2faReset",
   "row.add": "actRowAdd",
+  "row.update": "actRowUpdate",
   "row.delete": "actRowDelete",
 };
 

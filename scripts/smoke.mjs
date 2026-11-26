@@ -66,7 +66,7 @@ try {
   const health = await healthRes.json();
   assert.equal(health.ok, true);
   assert.equal(health.name, "OpenPanelX");
-  assert.equal(health.version, "0.4.3");
+  assert.equal(health.version, "0.4.4");
 
   const csp1 = healthRes.headers.get("content-security-policy") ?? "";
   assert.ok(csp1.includes("default-src 'self'"), `Missing CSP header: ${csp1}`);

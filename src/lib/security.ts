@@ -140,15 +140,17 @@ export function tooManyAttempts(key: string, maxAttempts = RATE_LIMIT_MAX): bool
   return getFailureCount(key) >= maxAttempts;
 }
 
-function enforceRateLimitCap(maxRows = MAX_RATE_LIMIT_ROWS): void {
+function enforceRateLimitCap(now: number, maxRows = MAX_RATE_LIMIT_ROWS): void {
   const total = (db.prepare("SELECT COUNT(*) AS n FROM rate_limits").get() as { n: number }).n;
   if (total < maxRows) return;
   const excess = total - maxRows + 1;
   db.prepare(
     `DELETE FROM rate_limits WHERE key IN (
-       SELECT key FROM rate_limits ORDER BY count ASC, until ASC LIMIT ?
+       SELECT key FROM rate_limits
+       ORDER BY CASE WHEN next_at > ? THEN 1 ELSE 0 END ASC, count ASC, next_at ASC, until ASC
+       LIMIT ?
      )`,
-  ).run(excess);
+  ).run(now, excess);
 }
 
 /**
@@ -188,7 +190,7 @@ export function reserveLoginSlot(
       return { allowed: false, waitMs, count: activeCount };
     }
 
-    if (!row) enforceRateLimitCap(maxRows);
+    if (!row) enforceRateLimitCap(now, maxRows);
 
     const nextAt = runAt + loginStepMs(activeCount);
     db.prepare(
@@ -214,7 +216,7 @@ export function noteFailure(key: string, now = Date.now(), maxRows = MAX_RATE_LI
     const row = db.prepare("SELECT count, until, next_at FROM rate_limits WHERE key = ?").get(key) as
       | { count: number; until: number; next_at: number }
       | undefined;
-    if (!row) enforceRateLimitCap(maxRows);
+    if (!row) enforceRateLimitCap(now, maxRows);
     const nextCount = !row || row.until <= now ? 1 : row.count + 1;
     const until = !row || row.until <= now ? nextUntil : row.until;
     const nextAt = Math.max(row?.next_at ?? 0, now + loginStepMs(nextCount));

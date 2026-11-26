@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.4
+
+### Security & Documentation
+- Bounded the SQLite `rate_limits` table to 5,000 active rows so random-username spraying cannot grow the database unboundedly.
+- Prioritized evicting inactive (`next_at <= now`) and lowest-count entries first so active pacing slots and high-count lockouts are preserved under load.
+- Documented direct (non-proxy) new-browser throttling behavior in `README.md` and `SECURITY.md`.
+
 ## v0.4.3
 
 ### Security

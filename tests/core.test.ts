@@ -148,18 +148,29 @@ describe("rate limits, serialized pacing, and proxy headers", () => {
     clearFailures(attackerKey);
   });
 
-  it("caps rate_limits table growth while preserving high-count lockouts", () => {
+  it("caps rate_limits table growth while preserving high-count lockouts and active pacing slots", () => {
     const lockedKey = "ipuser|203.0.113.99|admin";
+    const activeKey = "user|active-admin";
     const now = Date.now() + 20_000;
     for (let i = 0; i < 6; i++) noteFailure(lockedKey, now, 10);
+    for (let i = 0; i < 8; i++) {
+      reserveLoginSlot(`user|old-spray-${i}`, { maxRows: 10, now });
+    }
 
-    for (let i = 0; i < 25; i++) {
-      reserveLoginSlot(`user|random-spray-${i}`, { maxRows: 10, now: now + i });
+    // Advance past old spray slots' next_at (now + 200), then reserve an active slot and add more rows.
+    const t2 = now + 500;
+    reserveLoginSlot(activeKey, { maxRows: 10, now: t2 });
+    for (let i = 0; i < 6; i++) {
+      reserveLoginSlot(`user|new-spray-${i}`, { maxRows: 10, now: t2 });
     }
 
     const total = (db.prepare("SELECT COUNT(*) AS n FROM rate_limits").get() as { n: number }).n;
     assert.ok(total <= 10, `Expected <= 10 rows, got ${total}`);
     assert.equal(tooManyAttempts(lockedKey, 5), true);
+    const activeRow = db.prepare("SELECT next_at FROM rate_limits WHERE key = ?").get(activeKey) as
+      | { next_at: number }
+      | undefined;
+    assert.ok(activeRow && activeRow.next_at > t2);
     db.prepare("DELETE FROM rate_limits").run();
   });
 

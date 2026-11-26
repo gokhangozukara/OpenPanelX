@@ -56,7 +56,7 @@ describe("health and plugin read endpoints", () => {
     const body = (await res.json()) as { ok: boolean; name: string; version: string };
     assert.equal(body.ok, true);
     assert.equal(body.name, "OpenPanelX");
-    assert.equal(body.version, "0.4.3");
+    assert.equal(body.version, "0.4.4");
   });
 
   it("enforces authentication and omits filesystem dir on plugin list/detail", async () => {
